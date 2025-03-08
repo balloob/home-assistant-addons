@@ -1,13 +1,13 @@
 import puppeteer from "puppeteer";
-import { debug, isAddOn } from "./const.js";
+import { debug, isAddOn, getChromePath } from "./const.js";
 
 const HEADER_HEIGHT = 56;
 
 // These are JSON stringified values
-const hassLocalStorageDefaults = {
+const getHassLocalStorageDefaults = (darkMode) => ({
   dockedSidebar: `"always_hidden"`,
-  selectedTheme: `{"dark": false}`,
-};
+  selectedTheme: `{"dark": ${darkMode === true}}`,
+});
 
 // From https://www.bannerbear.com/blog/ways-to-speed-up-puppeteer-screenshots/
 const puppeteerArgs = [
@@ -56,6 +56,7 @@ export class Browser {
   page = undefined;
   lastAccess = new Date();
   TIMEOUT = 30_000; // 30s
+  currentDarkMode = undefined;
 
   constructor(homeAssistantUrl, token) {
     this.homeAssistantUrl = homeAssistantUrl;
@@ -83,14 +84,22 @@ export class Browser {
         await this.browser.close();
         this.browser = undefined;
       }
+      this.currentDarkMode = undefined;
       console.log("Closed browser");
     } finally {
       this.busy = false;
     }
   }
 
-  async getPage() {
-    if (this.page) {
+  async getPage(darkMode) {
+    if (this.page && this.currentDarkMode === darkMode) {
+      return this.page;
+    }
+
+    if (this.page && this.currentDarkMode !== darkMode) {
+      console.log(`Updating theme to dark mode = ${darkMode}`);
+      await this.updateTheme(darkMode);
+      this.currentDarkMode = darkMode;
       return this.page;
     }
 
@@ -101,9 +110,7 @@ export class Browser {
       console.log("Starting browser");
       browser = await puppeteer.launch({
         headless: "shell",
-        executablePath: isAddOn
-          ? "/usr/bin/chromium"
-          : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        executablePath: getChromePath(isAddOn),
         args: puppeteerArgs,
       });
       setTimeout(() => this.cleanup(), this.TIMEOUT);
@@ -144,30 +151,8 @@ export class Browser {
       // Open a lightweight page to set local storage
       await page.goto(`${hassUrl}/robots.txt`);
 
-      // Store access token in local storage when page is opened
-      await page.evaluate(
-        (hassUrl, clientId, token, hassLocalStorage) => {
-          for (const [key, value] of Object.entries(hassLocalStorage)) {
-            localStorage.setItem(key, value);
-          }
-          localStorage.setItem(
-            "hassTokens",
-            JSON.stringify({
-              access_token: token,
-              token_type: "Bearer",
-              expires_in: 1800,
-              hassUrl,
-              clientId,
-              expires: 9999999999999,
-              refresh_token: "",
-            }),
-          );
-        },
-        hassUrl,
-        clientId,
-        this.token,
-        hassLocalStorageDefaults,
-      );
+      await this.initializeLocalStorage(page, hassUrl, clientId, darkMode);
+      this.currentDarkMode = darkMode;
     } catch (err) {
       console.error("Error starting browser", err);
       if (page) {
@@ -184,7 +169,57 @@ export class Browser {
     return this.page;
   }
 
-  async screenshotHomeAssistant({ pagePath, viewport, extraWait }) {
+  async initializeLocalStorage(page, hassUrl, clientId, darkMode) {
+    const hassLocalStorage = getHassLocalStorageDefaults(darkMode);
+
+    await page.evaluate(
+      (hassUrl, clientId, token, hassLocalStorage) => {
+        for (const [key, value] of Object.entries(hassLocalStorage)) {
+          localStorage.setItem(key, value);
+        }
+        localStorage.setItem(
+          "hassTokens",
+          JSON.stringify({
+            access_token: token,
+            token_type: "Bearer",
+            expires_in: 1800,
+            hassUrl,
+            clientId,
+            expires: 9999999999999,
+            refresh_token: "",
+          }),
+        );
+      },
+      hassUrl,
+      clientId,
+      this.token,
+      hassLocalStorage,
+    );
+  }
+
+  async updateTheme(darkMode) {
+    if (!this.page) return;
+
+    await this.page.evaluate((darkMode) => {
+      localStorage.setItem("selectedTheme", `{"dark": ${darkMode === true}}`);
+      const event = new CustomEvent("settheme", {
+        bubbles: true,
+        composed: true,
+        detail: { dark: darkMode === true }
+      });
+      const homeAssistant = document.querySelector("home-assistant");
+      if (homeAssistant) {
+        homeAssistant.dispatchEvent(event);
+      } else {
+        window.dispatchEvent(event);
+      }
+    }, darkMode);
+
+    // Give the theme a moment to apply
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  async screenshotHomeAssistant({ pagePath, viewport, extraWait, darkMode }) {
     let start = new Date();
     if (this.busy) {
       console.log("Busy, waiting in queue");
@@ -196,20 +231,23 @@ export class Browser {
     this.busy = true;
 
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(darkMode);
 
       // We add 56px to the height to account for the header
       // We'll cut that off from the screenshot
-      viewport.height += HEADER_HEIGHT;
+      const fullViewport = {
+        width: viewport.width,
+        height: viewport.height + HEADER_HEIGHT
+      };
 
       const curViewport = page.viewport();
 
       if (
         !curViewport ||
-        curViewport.width !== viewport.width ||
-        curViewport.height !== viewport.height
+        curViewport.width !== fullViewport.width ||
+        curViewport.height !== fullViewport.height
       ) {
-        await page.setViewport(viewport);
+        await page.setViewport(fullViewport);
       }
 
       let defaultWait = isAddOn ? 750 : 500;
@@ -224,7 +262,7 @@ export class Browser {
           defaultWait += 2000;
         }
       } else {
-        // mimick HA frontend navigation (no full reload)
+        // mimic HA frontend navigation (no full reload)
         await page.evaluate((pagePath) => {
           history.replaceState(
             history.state?.root ? { root: true } : null,
@@ -250,6 +288,7 @@ export class Browser {
             const panelResolver = mainEl.shadowRoot?.querySelector(
               "partial-panel-resolver",
             );
+            // noinspection JSUnresolvedReference
             if (!panelResolver || panelResolver._loading) {
               return false;
             }
@@ -264,12 +303,47 @@ export class Browser {
             polling: 100,
           },
         );
+
+        // Wait for all images and Lovelace cards to load
+        await page.waitForFunction(
+          () => {
+            // Check if all images are loaded
+            const images = Array.from(document.querySelectorAll("img"));
+            const allImagesLoaded = images.every(img => img.complete);
+
+            // Check if Lovelace UI is loaded (if we're on a Lovelace page)
+            const haEl = document.querySelector("home-assistant");
+            const mainEl = haEl?.shadowRoot?.querySelector("home-assistant-main");
+            const panelResolver = mainEl?.shadowRoot?.querySelector("partial-panel-resolver");
+            const panel = panelResolver?.children[0];
+
+            // Check if it's a Lovelace panel
+            if (panel && panel.tagName === "HUI-ROOT") {
+              const lovelaceView = panel.shadowRoot?.querySelector("hui-view");
+              if (!lovelaceView) return false;
+
+              // Check if cards are still loading
+              const cards = lovelaceView.shadowRoot?.querySelectorAll("hui-card-element-editor, hui-card");
+              if (!cards || cards.length === 0) return false;
+
+              // Check if any card is still loading
+              for (const card of cards) {
+                if (card._config === undefined || card._hass === undefined) {
+                  return false;
+                }
+              }
+            }
+
+            return allImagesLoaded;
+          },
+          { timeout: 20000, polling: 200 }
+        );
+
       } catch (err) {
         console.log("Timeout waiting for HA to finish loading");
       }
 
       // wait for the work to be done.
-      // Not sure yet how to decide that?
       if (extraWait === undefined) {
         extraWait = defaultWait;
       }
@@ -282,7 +356,7 @@ export class Browser {
           x: 0,
           y: HEADER_HEIGHT,
           width: viewport.width,
-          height: viewport.height - HEADER_HEIGHT,
+          height: viewport.height,
         },
       });
 

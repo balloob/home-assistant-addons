@@ -92,17 +92,14 @@ export class Browser {
   }
 
   async getPage(darkMode) {
-    if (this.page && this.currentDarkMode === darkMode) {
-      return this.page;
-    }
+    if (this.page) {
+      if (this.currentDarkMode === darkMode) return this.page;
 
-    if (this.page && this.currentDarkMode !== darkMode) {
       console.log(`Updating theme to dark mode = ${darkMode}`);
-      await this.updateTheme(darkMode);
+      await this._updateTheme(darkMode);
       this.currentDarkMode = darkMode;
       return this.page;
     }
-
     let browser;
     let page;
 
@@ -151,7 +148,32 @@ export class Browser {
       // Open a lightweight page to set local storage
       await page.goto(`${hassUrl}/robots.txt`);
 
-      await this.initializeLocalStorage(page, hassUrl, clientId, darkMode);
+      // Initialize localStorage
+      const hassLocalStorage = getHassLocalStorageDefaults(darkMode);
+      await page.evaluate(
+        (hassUrl, clientId, token, hassLocalStorage) => {
+          for (const [key, value] of Object.entries(hassLocalStorage)) {
+            localStorage.setItem(key, value);
+          }
+          localStorage.setItem(
+            "hassTokens",
+            JSON.stringify({
+              access_token: token,
+              token_type: "Bearer",
+              expires_in: 1800,
+              hassUrl,
+              clientId,
+              expires: 9999999999999,
+              refresh_token: "",
+            }),
+          );
+        },
+        hassUrl,
+        clientId,
+        this.token,
+        hassLocalStorage,
+      );
+
       this.currentDarkMode = darkMode;
     } catch (err) {
       console.error("Error starting browser", err);
@@ -169,37 +191,7 @@ export class Browser {
     return this.page;
   }
 
-  async initializeLocalStorage(page, hassUrl, clientId, darkMode) {
-    const hassLocalStorage = getHassLocalStorageDefaults(darkMode);
-
-    await page.evaluate(
-      (hassUrl, clientId, token, hassLocalStorage) => {
-        for (const [key, value] of Object.entries(hassLocalStorage)) {
-          localStorage.setItem(key, value);
-        }
-        localStorage.setItem(
-          "hassTokens",
-          JSON.stringify({
-            access_token: token,
-            token_type: "Bearer",
-            expires_in: 1800,
-            hassUrl,
-            clientId,
-            expires: 9999999999999,
-            refresh_token: "",
-          }),
-        );
-      },
-      hassUrl,
-      clientId,
-      this.token,
-      hassLocalStorage,
-    );
-  }
-
-  async updateTheme(darkMode) {
-    if (!this.page) return;
-
+  async _updateTheme(darkMode) {
     await this.page.evaluate((darkMode) => {
       localStorage.setItem("selectedTheme", `{"dark": ${darkMode === true}}`);
       const event = new CustomEvent("settheme", {
@@ -214,6 +206,8 @@ export class Browser {
         window.dispatchEvent(event);
       }
     }, darkMode);
+
+    this.currentDarkMode = darkMode;
 
     // Give the theme a moment to apply
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -288,7 +282,6 @@ export class Browser {
             const panelResolver = mainEl.shadowRoot?.querySelector(
               "partial-panel-resolver",
             );
-            // noinspection JSUnresolvedReference
             if (!panelResolver || panelResolver._loading) {
               return false;
             }
@@ -328,7 +321,6 @@ export class Browser {
 
               // Check if any card is still loading
               for (const card of cards) {
-                // noinspection JSUnresolvedReference
                 if (card._config === undefined || card._hass === undefined) {
                   return false;
                 }

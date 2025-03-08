@@ -1,5 +1,5 @@
 import puppeteer from "puppeteer";
-import { debug, isAddOn, getChromePath } from "./const.js";
+import { debug, isAddOn, chromePath } from "./const.js";
 
 const HEADER_HEIGHT = 56;
 
@@ -110,7 +110,7 @@ export class Browser {
       console.log("Starting browser");
       browser = await puppeteer.launch({
         headless: "shell",
-        executablePath: getChromePath(isAddOn),
+        executablePath: chromePath,
         args: puppeteerArgs,
       });
       setTimeout(() => this.cleanup(), this.TIMEOUT);
@@ -328,6 +328,7 @@ export class Browser {
 
               // Check if any card is still loading
               for (const card of cards) {
+                // noinspection JSUnresolvedReference
                 if (card._config === undefined || card._hass === undefined) {
                   return false;
                 }

@@ -19,6 +19,16 @@ export const hassUrl = isAddOn
 export const hassToken = options.access_token;
 export const debug = false;
 
+export const getChromePath = (is_addon) => {
+  if (is_addon) {
+    return "/usr/bin/chromium";
+  } else if (process.platform === "darwin") {
+    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  } else {
+    return "/usr/bin/google-chrome";
+  }
+};
+
 if (!hassToken) {
   console.error("No access token found. Please configure the access token");
   process.exit(1);

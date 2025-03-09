@@ -19,6 +19,8 @@ export const hassUrl = isAddOn
 export const hassToken = options.access_token;
 export const debug = false;
 
+export const chromePath = isAddOn ? "/usr/bin/chromium" : undefined;
+
 if (!hassToken) {
   console.error("No access token found. Please configure the access token");
   process.exit(1);

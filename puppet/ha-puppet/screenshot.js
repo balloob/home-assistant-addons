@@ -1,13 +1,13 @@
 import puppeteer from "puppeteer";
-import { debug, isAddOn } from "./const.js";
+import { debug, isAddOn, chromePath } from "./const.js";
 
 const HEADER_HEIGHT = 56;
 
 // These are JSON stringified values
-const hassLocalStorageDefaults = {
+const getHassLocalStorageDefaults = (darkMode) => ({
   dockedSidebar: `"always_hidden"`,
-  selectedTheme: `{"dark": false}`,
-};
+  selectedTheme: `{"dark": ${darkMode === true}}`,
+});
 
 // From https://www.bannerbear.com/blog/ways-to-speed-up-puppeteer-screenshots/
 const puppeteerArgs = [
@@ -56,6 +56,7 @@ export class Browser {
   page = undefined;
   lastAccess = new Date();
   TIMEOUT = 30_000; // 30s
+  currentDarkMode = undefined;
 
   constructor(homeAssistantUrl, token) {
     this.homeAssistantUrl = homeAssistantUrl;
@@ -83,17 +84,22 @@ export class Browser {
         await this.browser.close();
         this.browser = undefined;
       }
+      this.currentDarkMode = undefined;
       console.log("Closed browser");
     } finally {
       this.busy = false;
     }
   }
 
-  async getPage() {
+  async getPage(darkMode) {
     if (this.page) {
+      if (this.currentDarkMode === darkMode) return this.page;
+
+      console.log(`Updating theme to dark mode = ${darkMode}`);
+      await this._updateTheme(darkMode);
+      this.currentDarkMode = darkMode;
       return this.page;
     }
-
     let browser;
     let page;
 
@@ -101,9 +107,7 @@ export class Browser {
       console.log("Starting browser");
       browser = await puppeteer.launch({
         headless: "shell",
-        executablePath: isAddOn
-          ? "/usr/bin/chromium"
-          : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        executablePath: chromePath,
         args: puppeteerArgs,
       });
       setTimeout(() => this.cleanup(), this.TIMEOUT);
@@ -144,7 +148,8 @@ export class Browser {
       // Open a lightweight page to set local storage
       await page.goto(`${hassUrl}/robots.txt`);
 
-      // Store access token in local storage when page is opened
+      // Initialize localStorage
+      const hassLocalStorage = getHassLocalStorageDefaults(darkMode);
       await page.evaluate(
         (hassUrl, clientId, token, hassLocalStorage) => {
           for (const [key, value] of Object.entries(hassLocalStorage)) {
@@ -166,8 +171,10 @@ export class Browser {
         hassUrl,
         clientId,
         this.token,
-        hassLocalStorageDefaults,
+        hassLocalStorage,
       );
+
+      this.currentDarkMode = darkMode;
     } catch (err) {
       console.error("Error starting browser", err);
       if (page) {
@@ -184,7 +191,29 @@ export class Browser {
     return this.page;
   }
 
-  async screenshotHomeAssistant({ pagePath, viewport, extraWait }) {
+  async _updateTheme(darkMode) {
+    await this.page.evaluate((darkMode) => {
+      localStorage.setItem("selectedTheme", `{"dark": ${darkMode === true}}`);
+      const event = new CustomEvent("settheme", {
+        bubbles: true,
+        composed: true,
+        detail: { dark: darkMode === true }
+      });
+      const homeAssistant = document.querySelector("home-assistant");
+      if (homeAssistant) {
+        homeAssistant.dispatchEvent(event);
+      } else {
+        window.dispatchEvent(event);
+      }
+    }, darkMode);
+
+    this.currentDarkMode = darkMode;
+
+    // Give the theme a moment to apply
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  async screenshotHomeAssistant({ pagePath, viewport, extraWait, darkMode }) {
     let start = new Date();
     if (this.busy) {
       console.log("Busy, waiting in queue");
@@ -196,20 +225,23 @@ export class Browser {
     this.busy = true;
 
     try {
-      const page = await this.getPage();
+      const page = await this.getPage(darkMode);
 
       // We add 56px to the height to account for the header
       // We'll cut that off from the screenshot
-      viewport.height += HEADER_HEIGHT;
+      const fullViewport = {
+        width: viewport.width,
+        height: viewport.height + HEADER_HEIGHT
+      };
 
       const curViewport = page.viewport();
 
       if (
         !curViewport ||
-        curViewport.width !== viewport.width ||
-        curViewport.height !== viewport.height
+        curViewport.width !== fullViewport.width ||
+        curViewport.height !== fullViewport.height
       ) {
-        await page.setViewport(viewport);
+        await page.setViewport(fullViewport);
       }
 
       let defaultWait = isAddOn ? 750 : 500;
@@ -226,7 +258,7 @@ export class Browser {
           defaultWait += 2000;
         }
       } else if (currentUrl.pathname !== pagePath) {
-        // mimick HA frontend navigation (no full reload)
+        // mimic HA frontend navigation (no full reload)
         await page.evaluate((pagePath) => {
           history.replaceState(
             history.state?.root ? { root: true } : null,
@@ -243,9 +275,47 @@ export class Browser {
       }
 
       try {
-        // Wait for the page to be loaded.
+        // Wait for the page to load completely, to the extent it's possible to check..
         await page.waitForFunction(
-          () => {
+          async () => {
+            const deepFindIgnoreTags = ["svg", "slot", "style"];
+            const deepQuerySelectorAll = (root, selector, single = false) => {
+              const results = [];
+              function traverse(node) {
+                if (single && results.length > 0) {
+                  return;
+                }
+                if (node instanceof Element) {
+                  if (node.shadowRoot) {
+                    traverse(node.shadowRoot);
+                  }
+                  Array.from(node.children).forEach(child => {
+                    if (single && results.length > 0) return;
+                    if (child.matches(selector)) {
+                      results.push(child);
+                      if (single) return;
+                    }
+                    traverse(child);
+                  });
+                } else if (node instanceof DocumentFragment) {
+                  Array.from(node.children).forEach(child => {
+                    if (single && results.length > 0) return;
+                    if (child.matches(selector)) {
+                      results.push(child);
+                      if (single) return;
+                    }
+                    traverse(child);
+                  });
+                }
+              }
+              if (!deepFindIgnoreTags.includes(root.tagName.toLowerCase())) {
+                traverse(root);
+              }
+              return single ? (results[0] || null) : results;
+            }
+            const deepQuerySelector = (root, selector) => deepQuerySelectorAll(root, selector, true);
+
+
             const haEl = document.querySelector("home-assistant");
             if (!haEl) return false;
             const mainEl = haEl.shadowRoot?.querySelector(
@@ -260,9 +330,31 @@ export class Browser {
             }
 
             const panel = panelResolver.children[0];
-            if (!panel) return false;
+            if (!panel) {
+              return false;
+            }
+            if (!("_panelState" in panel) || panel._panelState !== "loaded") {
+              return false;
+            }
 
-            return !("_loading" in panel) || !panel._loading;
+            const isLovelacePath = window.location.pathname.startsWith("/lovelace");
+            if (isLovelacePath) {
+              const lovelaceView = deepQuerySelector(panel, "hui-view");
+              if (!lovelaceView) {
+                return false;
+              }
+
+              // Wait a bit for cards to populate
+              await new Promise((resolve) => setTimeout(resolve, 500));
+              const allCards = deepQuerySelectorAll(lovelaceView, "hui-card");
+              if (allCards.length > 0) {
+                console.log(`Waiting for ${allCards.length} cards to load ...`);
+                return Array.from(allCards).every(card =>
+                  card.hasOwnProperty("__config") && card.hasOwnProperty("__hass")
+                );
+              }
+            }
+            return true;
           },
           {
             timeout: 10000,
@@ -274,7 +366,6 @@ export class Browser {
       }
 
       // wait for the work to be done.
-      // Not sure yet how to decide that?
       if (extraWait === undefined) {
         extraWait = defaultWait;
       }
@@ -287,7 +378,7 @@ export class Browser {
           x: 0,
           y: HEADER_HEIGHT,
           width: viewport.width,
-          height: viewport.height - HEADER_HEIGHT,
+          height: viewport.height,
         },
       });
 

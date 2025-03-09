@@ -1,6 +1,6 @@
 name: "Puppet"
 description: "Turn dashboards into ncie pictures"
-version: "1.8.0"
+version: "1.9.0"
 slug: "puppet"
 homeassistant_api: true
 init: false

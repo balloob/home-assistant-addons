@@ -246,8 +246,10 @@ export class Browser {
 
       let defaultWait = isAddOn ? 750 : 500;
 
+      const currentUrl = new URL(page.url());
+
       // If we're still on robots.txt, navigate to HA UI
-      if (page.url().endsWith("/robots.txt")) {
+      if (currentUrl.pathname === "/robots.txt") {
         const pageUrl = new URL(pagePath, this.homeAssistantUrl).toString();
         await page.goto(pageUrl);
 
@@ -255,7 +257,7 @@ export class Browser {
         if (isAddOn) {
           defaultWait += 2000;
         }
-      } else {
+      } else if (currentUrl.pathname !== pagePath) {
         // mimic HA frontend navigation (no full reload)
         await page.evaluate((pagePath) => {
           history.replaceState(
@@ -267,6 +269,9 @@ export class Browser {
           event.detail = { replace: true };
           window.dispatchEvent(event);
         }, pagePath);
+      } else {
+        // We are already on the correct page
+        defaultWait = 0;
       }
 
       try {

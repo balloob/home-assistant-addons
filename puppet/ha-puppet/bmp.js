@@ -1,8 +1,13 @@
+const supportedBitsPerPixel = [1, 24];
+
 export class BMPEncoder {
   constructor(width, height, bitsPerPixel) {
     this.width = width;
     this.height = height;
     this.bitsPerPixel = bitsPerPixel;
+    if (!supportedBitsPerPixel.includes(bitsPerPixel)) {
+      throw new Error(`Unsupported bits per pixel. Supported values are: ${supportedBitsPerPixel.join(", ")}`);
+    }
   };
 
   encode(data) {
@@ -37,15 +42,15 @@ export class BMPEncoder {
     return header;
   };
 
-  // Handle bitsPerPixel 1, 4, 8, 16, 24, 32
+  // Handles bitsPerPixel 1, 24
 
   createPixelData(imageData) {
     const pixelData = Buffer.alloc(this.width * this.height * (this.bitsPerPixel / 8));
     let offset = 0;
 
-    for (let y = this.height - 1; y >= 0; y--) {
-      for (let x = 0; x < this.width; x++) {
-        if (this.bitsPerPixel === 1) {
+    if (this.bitsPerPixel === 1) {
+      for (let y = this.height - 1; y >= 0; y--) {
+        for (let x = 0; x < this.width; x++) {
           const pixel = imageData[y * this.width + x];
           const byteIndex = Math.floor(offset / 8);
           const bitIndex = offset % 8;
@@ -55,14 +60,22 @@ export class BMPEncoder {
             pixelData[byteIndex] &= ~(1 << (7 - bitIndex));
           }
           offset++;
-        } else if (this.bitsPerPixel === 24) {
-          const r = imageData[y * this.width + x];
-          const g = imageData[y * this.width + x + 1];
-          const b = imageData[y * this.width + x + 2];
-          pixelData.writeUInt8(b, offset);
-          pixelData.writeUInt8(g, offset + 1);
-          pixelData.writeUInt8(r, offset + 2);
-          offset += 3;
+        }
+      }
+    } else if (this.bitsPerPixel === 24) {
+      const padding = (this.width * 3) % 4;
+      for (let y = this.height - 1; y >= 0; y--) {
+        for (let x = 0; x < this.width; x++) {
+          const sourceIndex = (y * this.width * 3) + (x * 3);
+          const r = imageData[sourceIndex];
+          const g = imageData[sourceIndex + 1];
+          const b = imageData[sourceIndex + 2];
+          pixelData.writeUInt8(b, offset++);
+          pixelData.writeUInt8(g, offset++);
+          pixelData.writeUInt8(r, offset++);
+        }
+        for (let p = 0; p < padding; p++) {
+          pixelData.writeUInt8(0, offset++);
         }
       }
     }

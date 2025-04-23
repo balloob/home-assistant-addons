@@ -36,6 +36,9 @@ const handler = async (request, response, { browser }) => {
 
   const invert = requestUrl.searchParams.has("invert");
 
+  const format = (requestUrl.searchParams.get("format") || "png");
+
+
   let image;
   try {
     image = await browser.screenshotHomeAssistant({
@@ -44,6 +47,7 @@ const handler = async (request, response, { browser }) => {
       extraWait,
       einkColors,
       invert,
+      format,
     });
   } catch (err) {
     console.error("Error generating screenshot", err);
@@ -52,8 +56,17 @@ const handler = async (request, response, { browser }) => {
     return;
   }
 
+  let content_type = "image/png";
+  if (format === "bmp") {
+    content_type = "image/bmp";
+  } else if (format !== "png") {
+    response.statusCode = 400;
+    response.end();
+    return;
+  }
+
   response.writeHead(200, {
-    "Content-Type": "image/png",
+    "Content-Type": content_type,
     "Content-Length": image.length,
   });
   response.write(image);

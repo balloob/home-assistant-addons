@@ -1,5 +1,6 @@
 import puppeteer from "puppeteer";
 import sharp from "sharp"; // Import sharp
+import { BMPEncoder } from "./bmp.js";
 import { debug, isAddOn } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
 
@@ -111,7 +112,8 @@ export class Browser {
         headless: "shell",
         executablePath: isAddOn
           ? "/usr/bin/chromium"
-          : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          // : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          : "/usr/bin/google-chrome-stable",
         args: puppeteerArgs,
       });
       setTimeout(() => this.cleanup(), this.TIMEOUT);
@@ -167,6 +169,7 @@ export class Browser {
     extraWait,
     einkColors,
     invert,
+    format,
   }) {
     let start = new Date();
     if (this.busy) {
@@ -332,7 +335,8 @@ export class Browser {
       });
 
       // Process image for e-ink if requested
-      if (einkColors) {
+      if (einkColors || format !== "png") {
+
         let sharpInstance = sharp(image);
 
         // Manually handle color conversion for 2 colors
@@ -346,11 +350,33 @@ export class Browser {
             });
           }
         }
-        image = await sharpInstance
-          .png({
-            colours: einkColors,
-          })
-          .toBuffer();
+        if (format === "bmp") {
+          if (einkColors === 2) {
+            sharpInstance = sharpInstance.toColourspace("b-w");
+          }
+          sharpInstance = sharpInstance.raw();
+
+          const {data, info } = await sharpInstance.toBuffer({ resolveWithObject: true });
+          let bitsPerPixel = 8;
+          if (einkColors === 2) {
+            bitsPerPixel = 1;
+          } else if (einkColors === 4) {
+            bitsPerPixel = 2;
+          } else if (einkColors === 16) {
+            bitsPerPixel = 4;
+          }
+          const bmpEncoder = new BMPEncoder(info.width, info.height, bitsPerPixel);
+          image = bmpEncoder.encode(data);
+        } else if (format === "png") {
+          sharpInstance = sharpInstance
+            .png({
+              colours: einkColors,
+            });
+            image = await sharpInstance.toBuffer();
+        } else {
+          // unsupported format
+          throw new Error(`Unsupported format: ${format}`);
+        }
       }
 
       const end = Date.now();

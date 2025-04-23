@@ -37,7 +37,7 @@ export class BMPEncoder {
     return header;
   };
 
-  // Handle bitsPerPizel 1, 4, 8, 16, 24, 32
+  // Handle bitsPerPixel 1, 4, 8, 16, 24, 32
 
   createPixelData(imageData) {
     const pixelData = Buffer.alloc(this.width * this.height * (this.bitsPerPixel / 8));
@@ -45,8 +45,8 @@ export class BMPEncoder {
 
     for (let y = this.height - 1; y >= 0; y--) {
       for (let x = 0; x < this.width; x++) {
-        const pixel = imageData[y * this.width + x];
         if (this.bitsPerPixel === 1) {
+          const pixel = imageData[y * this.width + x];
           const byteIndex = Math.floor(offset / 8);
           const bitIndex = offset % 8;
           if (pixel == 0xFF) {
@@ -55,8 +55,14 @@ export class BMPEncoder {
             pixelData[byteIndex] &= ~(1 << (7 - bitIndex));
           }
           offset++;
-        } else {
-          pixelData.writeUInt8(pixel, offset++);
+        } else if (this.bitsPerPixel === 24) {
+          const r = imageData[y * this.width + x];
+          const g = imageData[y * this.width + x + 1];
+          const b = imageData[y * this.width + x + 2];
+          pixelData.writeUInt8(b, offset);
+          pixelData.writeUInt8(g, offset + 1);
+          pixelData.writeUInt8(r, offset + 2);
+          offset += 3;
         }
       }
     }

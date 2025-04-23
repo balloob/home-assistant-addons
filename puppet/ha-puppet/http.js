@@ -34,10 +34,22 @@ const handler = async (request, response, { browser }) => {
     einkColors = undefined;
   }
 
+  let zoom = parseFloat(requestUrl.searchParams.get("zoom"));
+  if (isNaN(zoom) || zoom <= 0) {
+    zoom = 1;
+  }
+
   const invert = requestUrl.searchParams.has("invert");
 
-  const format = (requestUrl.searchParams.get("format") || "png");
+  let format = requestUrl.searchParams.get("format") || "png";
+  if (!["png", "jpeg", "webp", "bmp"].includes(format)) {
+    format = "png";
+  }
 
+  let rotate = parseInt(requestUrl.searchParams.get("rotate"));
+  if (isNaN(rotate) || ![90, 180, 270].includes(rotate)) {
+    rotate = undefined;
+  }
 
   let image;
   try {
@@ -47,7 +59,9 @@ const handler = async (request, response, { browser }) => {
       extraWait,
       einkColors,
       invert,
+      zoom,
       format,
+      rotate,
     });
   } catch (err) {
     console.error("Error generating screenshot", err);
@@ -56,17 +70,21 @@ const handler = async (request, response, { browser }) => {
     return;
   }
 
-  let content_type = "image/png";
-  if (format === "bmp") {
-    content_type = "image/bmp";
-  } else if (format !== "png") {
-    response.statusCode = 400;
-    response.end();
-    return;
+  // If eink processing happened, the format could be png or bmp
+  const responseFormat = (einkColors && format !== "bmp") ? "png" : format;
+  let contentType;
+  if (responseFormat === "jpeg") {
+    contentType = "image/jpeg";
+  } else if (responseFormat === "webp") {
+    contentType = "image/webp";
+  } else if (responseFormat === "bmp") {
+    contentType = "image/bmp";
+  } else {
+    contentType = "image/png";
   }
 
   response.writeHead(200, {
-    "Content-Type": content_type,
+    "Content-Type": contentType,
     "Content-Length": image.length,
   });
   response.write(image);

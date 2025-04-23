@@ -169,7 +169,9 @@ export class Browser {
     extraWait,
     einkColors,
     invert,
+    zoom,
     format,
+    rotate,
   }) {
     let start = new Date();
     if (this.busy) {
@@ -186,7 +188,8 @@ export class Browser {
 
       // We add 56px to the height to account for the header
       // We'll cut that off from the screenshot
-      viewport.height += HEADER_HEIGHT;
+      const headerHeight = Math.round(HEADER_HEIGHT * zoom);
+      viewport.height += headerHeight;
 
       const curViewport = page.viewport();
 
@@ -266,7 +269,10 @@ export class Browser {
       // Dismiss any dashboard update avaiable toasts
       if (
         !openedNewPage &&
-        (await page.evaluate(() => {
+        (await page.evaluate((zoomLevel) => {
+          // Set zoom level
+          document.body.style.zoom = zoomLevel;
+
           const haEl = document.querySelector("home-assistant");
           if (!haEl) return false;
           const notifyEl = haEl.shadowRoot?.querySelector(
@@ -279,10 +285,15 @@ export class Browser {
           if (!actionEl) return false;
           actionEl.click();
           return true;
-        }))
+        }, zoom))
       ) {
         // If we dismissed a toast, let's wait a bit longer
         defaultWait += 1000;
+      } else {
+        // Set zoom level
+        await page.evaluate((zoomLevel) => {
+          document.body.style.zoom = zoomLevel;
+        }, zoom);
       }
 
       // Wait for the page to be loaded.
@@ -325,32 +336,42 @@ export class Browser {
         await new Promise((resolve) => setTimeout(resolve, extraWait));
       }
 
+      // If eink processing is requested, we need PNG input for sharp.
+      // Otherwise, use the requested format.
+      const screenshotType = (einkColors || format == "bmp") ? "png" : format;
+
       let image = await page.screenshot({
+        type: screenshotType,
         clip: {
           x: 0,
-          y: HEADER_HEIGHT,
+          y: headerHeight,
           width: viewport.width,
-          height: viewport.height - HEADER_HEIGHT,
+          height: viewport.height - headerHeight,
         },
       });
 
-      // Process image for e-ink if requested
-      if (einkColors || format !== "png") {
+      let sharpInstance = sharp(image);
 
-        let sharpInstance = sharp(image);
+      if (rotate) {
+        sharpInstance = sharpInstance.rotate(rotate);
+      }
 
-        // Manually handle color conversion for 2 colors
-        if (einkColors === 2) {
-          sharpInstance = sharpInstance.threshold(220, {
-            greyscale: true,
+      // Manually handle color conversion for 2 colors
+      if (einkColors === 2) {
+        sharpInstance = sharpInstance.threshold(220, {
+          greyscale: true,
+        });
+        if (invert) {
+          sharpInstance = sharpInstance.negate({
+            alpha: false,
           });
-          if (invert) {
-            sharpInstance = sharpInstance.negate({
-              alpha: false,
-            });
-          }
         }
-        if (format === "bmp") {
+      }
+
+      // If eink processing was requested, output PNG with specified colors
+      if (einkColors) {
+
+        if (format == "bmp") {
           if (einkColors === 2) {
             sharpInstance = sharpInstance.toColourspace("b-w");
           }
@@ -367,17 +388,32 @@ export class Browser {
           }
           const bmpEncoder = new BMPEncoder(info.width, info.height, bitsPerPixel);
           image = bmpEncoder.encode(data);
-        } else if (format === "png") {
-          sharpInstance = sharpInstance
-            .png({
-              colours: einkColors,
-            });
-            image = await sharpInstance.toBuffer();
         } else {
-          // unsupported format
-          throw new Error(`Unsupported format: ${format}`);
+          sharpInstance = sharpInstance.png({
+            colours: einkColors,
+          });
+          image = await sharpInstance.toBuffer();
+        }
+      } else {
+        // Otherwise, output in the requested format
+        if (format === "jpeg") {
+          sharpInstance = sharpInstance.jpeg();
+          image = await sharpInstance.toBuffer();
+        } else if (format === "webp") {
+          sharpInstance = sharpInstance.webp();
+          image = await sharpInstance.toBuffer();
+        } else if (format === "bmp") {
+          sharpInstance = sharpInstance.raw();
+
+          const {data, info } = await sharpInstance.toBuffer({ resolveWithObject: true });
+          const bmpEncoder = new BMPEncoder(info.width, info.height, 24);
+          image = bmpEncoder.encode(data);
+        } else {
+          sharpInstance = sharpInstance.png();
+          image = await sharpInstance.toBuffer();
         }
       }
+
 
       const end = Date.now();
       console.log(`Screenshot time: ${end - start} ms`);

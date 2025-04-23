@@ -19,6 +19,8 @@ export const hassUrl = isAddOn
 export const hassToken = options.access_token;
 export const debug = false;
 
+export const chromiumExecutable = isAddOn ? "/usr/bin/chromium" : (options.chromium_executable || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+
 if (!hassToken) {
   console.error("No access token found. Please configure the access token");
   process.exit(1);

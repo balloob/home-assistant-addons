@@ -112,8 +112,7 @@ export class Browser {
         headless: "shell",
         executablePath: isAddOn
           ? "/usr/bin/chromium"
-          // : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-          : "/usr/bin/google-chrome-stable",
+          : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         args: puppeteerArgs,
       });
       setTimeout(() => this.cleanup(), this.TIMEOUT);
@@ -370,7 +369,6 @@ export class Browser {
 
       // If eink processing was requested, output PNG with specified colors
       if (einkColors) {
-
         if (format == "bmp") {
           if (einkColors === 2) {
             sharpInstance = sharpInstance.toColourspace("b-w");
@@ -394,26 +392,23 @@ export class Browser {
           });
           image = await sharpInstance.toBuffer();
         }
-      } else {
-        // Otherwise, output in the requested format
-        if (format === "jpeg") {
-          sharpInstance = sharpInstance.jpeg();
-          image = await sharpInstance.toBuffer();
-        } else if (format === "webp") {
-          sharpInstance = sharpInstance.webp();
-          image = await sharpInstance.toBuffer();
-        } else if (format === "bmp") {
-          sharpInstance = sharpInstance.raw();
-
-          const {data, info } = await sharpInstance.toBuffer({ resolveWithObject: true });
-          const bmpEncoder = new BMPEncoder(info.width, info.height, 24);
-          image = bmpEncoder.encode(data);
-        } else {
-          sharpInstance = sharpInstance.png();
-          image = await sharpInstance.toBuffer();
-        }
       }
-
+      // Otherwise, output in the requested format
+      else if (format === "jpeg") {
+        sharpInstance = sharpInstance.jpeg();
+        image = await sharpInstance.toBuffer();
+      } else if (format === "webp") {
+        sharpInstance = sharpInstance.webp();
+        image = await sharpInstance.toBuffer();
+      } else if (format === "bmp") {
+        sharpInstance = sharpInstance.raw();
+        const {data, info } = await sharpInstance.toBuffer({ resolveWithObject: true });
+        const bmpEncoder = new BMPEncoder(info.width, info.height, 24);
+        image = bmpEncoder.encode(data);
+      } else {
+        sharpInstance = sharpInstance.png();
+        image = await sharpInstance.toBuffer();
+      }
 
       const end = Date.now();
       console.log(`Screenshot time: ${end - start} ms`);

@@ -1,6 +1,6 @@
 import puppeteer from "puppeteer";
 import sharp from "sharp"; // Import sharp
-import { debug, isAddOn } from "./const.js";
+import { debug, isAddOn, chromiumExecutable } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
 
 const HEADER_HEIGHT = 56;
@@ -109,9 +109,7 @@ export class Browser {
       console.log("Starting browser");
       browser = await puppeteer.launch({
         headless: "shell",
-        executablePath: isAddOn
-          ? "/usr/bin/chromium"
-          : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        executablePath: chromiumExecutable,
         args: puppeteerArgs,
       });
       setTimeout(() => this.cleanup(), this.TIMEOUT);

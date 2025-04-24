@@ -63,7 +63,7 @@ export class BMPEncoder {
         }
       }
     } else if (this.bitsPerPixel === 24) {
-      const padding = (this.width * 3) % 4;
+      const padding = 4 - ((this.width * 3) % 4);
       for (let y = this.height - 1; y >= 0; y--) {
         for (let x = 0; x < this.width; x++) {
           const sourceIndex = (y * this.width * 3) + (x * 3);

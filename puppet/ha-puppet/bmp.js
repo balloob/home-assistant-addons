@@ -8,6 +8,13 @@ export class BMPEncoder {
     if (!supportedBitsPerPixel.includes(bitsPerPixel)) {
       throw new Error(`Unsupported bits per pixel. Supported values are: ${supportedBitsPerPixel.join(", ")}`);
     }
+
+    let padding = (this.width * (this.bitsPerPixel / 8)) % 4;
+    if (padding > 0) {
+      padding = 4 - padding;
+    }
+    this.padding = padding;
+    this.paddedWidthBytes = Math.ceil(this.width * (this.bitsPerPixel / 8)) + padding;
   };
 
   encode(data) {
@@ -18,7 +25,7 @@ export class BMPEncoder {
 
   createHeader() {
     const headerSize = this.bitsPerPixel === 1 ? 62 : 54;
-    const fileSize = headerSize + this.width * this.height * (this.bitsPerPixel / 8);
+    const fileSize = headerSize + this.height * this.paddedWidthBytes;
     const header = Buffer.alloc(headerSize);
     header.write("BM", 0, 2, "ascii");
     header.writeUInt32LE(fileSize, 2);
@@ -45,28 +52,31 @@ export class BMPEncoder {
   // Handles bitsPerPixel 1, 24
 
   createPixelData(imageData) {
-    const pixelData = Buffer.alloc(this.width * this.height * (this.bitsPerPixel / 8));
     let offset = 0;
+    const pixelData = Buffer.alloc(this.height * this.paddedWidthBytes);
 
     if (this.bitsPerPixel === 1) {
-      for (let y = this.height - 1; y >= 0; y--) {
+      for (let y = 0; y < this.height; y++) {
         for (let x = 0; x < this.width; x++) {
           const pixel = imageData[y * this.width + x];
-          const byteIndex = Math.floor(offset / 8);
-          const bitIndex = offset % 8;
+          const byteIndex = ((this.height - 1 - y) * this.paddedWidthBytes + Math.floor(x / 8));
+          const bitIndex = x % 8;
+          const currentByte = pixelData.readUInt8(byteIndex);
           if (pixel == 0xFF) {
-            pixelData[byteIndex] |= (1 << (7 - bitIndex));
+            pixelData.writeUInt8(currentByte | (1 << (7 - bitIndex)), byteIndex);
           } else {
-            pixelData[byteIndex] &= ~(1 << (7 - bitIndex));
+            pixelData.writeUInt8(currentByte & ~(1 << (7 - bitIndex)), byteIndex);
           }
-          offset++;
+        }
+        offset += Math.ceil(this.width / 8);
+        for (let p = 0; p < this.padding; p++) {
+          pixelData.writeUInt8(0, offset++);
         }
       }
     } else if (this.bitsPerPixel === 24) {
-      const padding = 4 - ((this.width * 3) % 4);
       for (let y = this.height - 1; y >= 0; y--) {
         for (let x = 0; x < this.width; x++) {
-          const sourceIndex = (y * this.width * 3) + (x * 3);
+          const sourceIndex = (y * this.paddedWidthBytes) + (x * 3);
           const r = imageData[sourceIndex];
           const g = imageData[sourceIndex + 1];
           const b = imageData[sourceIndex + 2];
@@ -74,7 +84,7 @@ export class BMPEncoder {
           pixelData.writeUInt8(g, offset++);
           pixelData.writeUInt8(r, offset++);
         }
-        for (let p = 0; p < padding; p++) {
+        for (let p = 0; p < this.padding; p++) {
           pixelData.writeUInt8(0, offset++);
         }
       }

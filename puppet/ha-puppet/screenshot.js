@@ -417,10 +417,10 @@ export class Browser {
 
       // If eink processing was requested, output PNG with specified colors
       if (einkColors) {
+        if (einkColors === 2) {
+          sharpInstance = sharpInstance.toColourspace("b-w");
+        }
         if (format == "bmp") {
-          if (einkColors === 2) {
-            sharpInstance = sharpInstance.toColourspace("b-w");
-          }
           sharpInstance = sharpInstance.raw();
 
           const { data, info } = await sharpInstance.toBuffer({
@@ -440,6 +440,12 @@ export class Browser {
             bitsPerPixel,
           );
           image = bmpEncoder.encode(data);
+        } else if (format === "jpeg") {
+          sharpInstance = sharpInstance.jpeg();
+          image = await sharpInstance.toBuffer();
+        } else if (format === "webp") {
+          sharpInstance = sharpInstance.webp();
+          image = await sharpInstance.toBuffer();
         } else {
           sharpInstance = sharpInstance.png({
             colours: einkColors,

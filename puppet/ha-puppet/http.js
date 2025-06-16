@@ -169,7 +169,7 @@ class RequestHandler {
       }
 
       // If eink processing happened, the format could be png or bmp
-      const responseFormat = einkColors && format !== "bmp" ? "png" : format;
+      const responseFormat = format;
       let contentType;
       if (responseFormat === "jpeg") {
         contentType = "image/jpeg";

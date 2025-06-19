@@ -11,5 +11,7 @@ ports:
   10000/tcp: 10000
 options:
   access_token: ""
+  keep_browser_open: false
 schema:
   access_token: str
+  keep_browser_open: bool

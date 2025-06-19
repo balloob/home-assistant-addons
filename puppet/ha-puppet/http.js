@@ -1,6 +1,6 @@
 import http from "node:http";
 import { Browser } from "./screenshot.js";
-import { isAddOn, hassUrl, hassToken } from "./const.js";
+import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
 
 // Maximum number of next requests to keep in memory
@@ -223,7 +223,9 @@ class RequestHandler {
       if (resolve) {
         resolve();
       }
-      this._markBrowserAccessed();
+      if (!keepBrowserOpen) {
+        this._markBrowserAccessed();
+      }
     }
   }
 
@@ -250,7 +252,9 @@ class RequestHandler {
       if (resolve) {
         resolve();
       }
-      this._markBrowserAccessed();
+      if (!keepBrowserOpen) {
+        this._markBrowserAccessed();
+      }
     }
   }
 }

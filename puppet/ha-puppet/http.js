@@ -51,6 +51,9 @@ class RequestHandler {
   _markBrowserAccessed() {
     clearTimeout(this.browserCleanupTimer);
     this.lastAccess = new Date();
+    if (keepBrowserOpen) {
+      return;
+    }
     this.browserCleanupTimer = setTimeout(
       this._runBrowserCleanupCheck,
       BROWSER_TIMEOUT + 100,
@@ -223,9 +226,7 @@ class RequestHandler {
       if (resolve) {
         resolve();
       }
-      if (!keepBrowserOpen) {
-        this._markBrowserAccessed();
-      }
+      this._markBrowserAccessed();
     }
   }
 
@@ -252,9 +253,7 @@ class RequestHandler {
       if (resolve) {
         resolve();
       }
-      if (!keepBrowserOpen) {
-        this._markBrowserAccessed();
-      }
+      this._markBrowserAccessed();
     }
   }
 }

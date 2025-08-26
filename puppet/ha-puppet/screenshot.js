@@ -417,6 +417,7 @@ export class Browser {
 
       // If eink processing was requested, output PNG with specified colors
       if (einkColors) {
+	sharpInstance = sharpInstance.grayscale()
         if (einkColors === 2) {
           sharpInstance = sharpInstance.toColourspace("b-w");
         }

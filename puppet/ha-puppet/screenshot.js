@@ -403,23 +403,18 @@ export class Browser {
         sharpInstance = sharpInstance.rotate(rotate);
       }
 
-      // Manually handle color conversion for 2 colors
-      if (einkColors === 2) {
-        sharpInstance = sharpInstance.threshold(220, {
-          greyscale: true,
-        });
-        if (invert) {
-          sharpInstance = sharpInstance.negate({
-            alpha: false,
-          });
-        }
-      }
-
       // If eink processing was requested, output PNG with specified colors
       if (einkColors) {
-	sharpInstance = sharpInstance.grayscale()
+        sharpInstance = sharpInstance.toColourspace("b-w");
         if (einkColors === 2) {
-          sharpInstance = sharpInstance.toColourspace("b-w");
+          sharpInstance = sharpInstance.threshold(220, {
+            greyscale: true,
+          });
+          if (invert) {
+            sharpInstance = sharpInstance.negate({
+              alpha: false,
+            });
+          }
         }
         if (format == "bmp") {
           sharpInstance = sharpInstance.raw();

@@ -6,6 +6,122 @@ import { CannotOpenPageError } from "./error.js";
 
 const HEADER_HEIGHT = 56;
 
+// Dithering algorithms
+function applyDithering(data, width, height, palette, channels = 4, algorithm = "atkinson") {
+  // Convert hex colors to RGB
+  const rgbPalette = palette.map(hex => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+  });
+
+  // Function to find the closest color in the palette
+  function findClosestColor(r, g, b) {
+    let minDistance = Infinity;
+    let closestColor = rgbPalette[0];
+
+    for (const color of rgbPalette) {
+      const distance = Math.sqrt(
+        Math.pow(r - color[0], 2) +
+        Math.pow(g - color[1], 2) +
+        Math.pow(b - color[2], 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestColor = color;
+      }
+    }
+
+    return closestColor;
+  }
+
+  if (algorithm === "none") {
+    // Simple nearest color mapping without dithering
+    const result = new Uint8Array(data);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * channels;
+        const [newR, newG, newB] = findClosestColor(result[idx], result[idx + 1], result[idx + 2]);
+        result[idx] = newR;
+        result[idx + 1] = newG;
+        result[idx + 2] = newB;
+      }
+    }
+    return result;
+  }
+
+  // Apply error diffusion dithering
+  return applyErrorDiffusionDithering(data, width, height, rgbPalette, channels, algorithm, findClosestColor);
+}
+
+function applyErrorDiffusionDithering(data, width, height, rgbPalette, channels, algorithm, findClosestColor) {
+  // Create a copy of the data to work with
+  const result = new Uint8Array(data);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * channels;
+
+      const oldR = result[idx];
+      const oldG = result[idx + 1];
+      const oldB = result[idx + 2];
+
+      const [newR, newG, newB] = findClosestColor(oldR, oldG, oldB);
+
+      result[idx] = newR;
+      result[idx + 1] = newG;
+      result[idx + 2] = newB;
+      // Keep alpha channel unchanged if it exists
+      if (channels === 4) {
+        // Alpha channel remains the same
+      }
+
+      const errorR = oldR - newR;
+      const errorG = oldG - newG;
+      const errorB = oldB - newB;
+
+      // Distribute error to neighboring pixels
+      const distribute = (dx, dy, factor, dampening = 1.0) => {
+        const newX = x + dx;
+        const newY = y + dy;
+
+        if (newX >= 0 && newX < width && newY >= 0 && newY < height) {
+          const newIdx = (newY * width + newX) * channels;
+          const dampedErrorR = errorR * dampening;
+          const dampedErrorG = errorG * dampening;
+          const dampedErrorB = errorB * dampening;
+          result[newIdx] = Math.max(0, Math.min(255, result[newIdx] + dampedErrorR * factor));
+          result[newIdx + 1] = Math.max(0, Math.min(255, result[newIdx + 1] + dampedErrorG * factor));
+          result[newIdx + 2] = Math.max(0, Math.min(255, result[newIdx + 2] + dampedErrorB * factor));
+          // Don't modify alpha channel
+        }
+      };
+
+      // Apply different error distribution patterns based on algorithm
+      if (algorithm === "floyd-steinberg") {
+        // Floyd-Steinberg error distribution (classic, sharper)
+        distribute(1, 0, 7/16);  // Right
+        distribute(-1, 1, 3/16); // Bottom-left
+        distribute(0, 1, 5/16);  // Bottom
+        distribute(1, 1, 1/16);  // Bottom-right
+      } else if (algorithm === "atkinson") {
+        // Atkinson dithering error distribution (softer)
+        const errorDampening = 0.75; // Reduce error intensity for softer dithering
+        distribute(1, 0, 1/8, errorDampening);   // Right
+        distribute(2, 0, 1/8, errorDampening);   // Right + 1
+        distribute(-1, 1, 1/8, errorDampening);  // Bottom-left
+        distribute(0, 1, 1/8, errorDampening);   // Bottom
+        distribute(1, 1, 1/8, errorDampening);   // Bottom-right
+        distribute(0, 2, 1/8, errorDampening);   // Bottom + 1
+      }
+    }
+  }
+
+  return result;
+}
+
 // These are JSON stringified values
 const hassLocalStorageDefaults = {
   dockedSidebar: `"always_hidden"`,
@@ -371,7 +487,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, einkColors, invert, zoom, format, rotate }) {
+  async screenshotPage({ viewport, einkColors, colors, dithering, invert, zoom, format, rotate }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -401,6 +517,27 @@ export class Browser {
 
       if (rotate) {
         sharpInstance = sharpInstance.rotate(rotate);
+      }
+
+      // Apply custom color dithering if colors parameter is provided
+      if (colors && colors.length > 0) {
+        // Convert to raw pixel data for custom dithering
+        sharpInstance = sharpInstance.ensureAlpha().raw();
+        const { data, info } = await sharpInstance.toBuffer({
+          resolveWithObject: true,
+        });
+
+        // Apply dithering with the specified colors and algorithm
+        const ditheredData = applyDithering(data, info.width, info.height, colors, info.channels, dithering);
+
+        // Create new sharp instance from dithered data
+        sharpInstance = sharp(ditheredData, {
+          raw: {
+            width: info.width,
+            height: info.height,
+            channels: info.channels,
+          },
+        });
       }
 
       // Manually handle color conversion for 2 colors

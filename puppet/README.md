@@ -10,6 +10,12 @@ _This is a prototype, there is NO security. Anyone can access the server and mak
 
 [![ESPHome device showing a screenshot of a Home Assistant dashboard](https://raw.githubusercontent.com/balloob/home-assistant-addons/main/puppet/example/screenshot.jpg)](./example/)
 
+## Configuration
+
+- home_assistant_url: Base URL of your Home Assistant instance that the add-on browser should open when taking screenshots. Defaults to http://homeassistant:8123 when running as an add-on. You can override it if your instance is reachable via a different hostname or port (e.g., http://my-ha.local:8123 or https://example.duckdns.org).
+- access_token: Long-lived access token used to authenticate against Home Assistant.
+- keep_browser_open: If true, keeps the Chromium browser alive between requests.
+
 ## Usage
 
 Starting the add-on will launch a new server on port 10000. Any path you request will return a screenshot of that page. You will need to specify the viewport size you want.

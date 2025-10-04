@@ -14,8 +14,8 @@ export const isAddOn = optionsFile === "/data/options.json";
 const options = JSON.parse(readFileSync(optionsFile));
 
 export const hassUrl = isAddOn
-  ? "http://homeassistant:8123"
-  : options.home_assistant_url;
+  ? (options.home_assistant_url || "http://homeassistant:8123")
+  : (options.home_assistant_url || "http://localhost:8123");
 export const hassToken = options.access_token;
 export const debug = false;
 

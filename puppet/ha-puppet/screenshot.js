@@ -69,6 +69,10 @@ export class Browser {
     this.lastRequestedLang = undefined;
     this.lastRequestedTheme = undefined;
     this.lastRequestedDarkMode = undefined;
+
+    // Retry tracking for browser launch failures
+    this.launchRetryCount = 0;
+    this.maxRetries = 3;
   }
 
   async cleanup() {
@@ -84,6 +88,7 @@ export class Browser {
     this.lastRequestedLang = undefined;
     this.lastRequestedTheme = undefined;
     this.lastRequestedDarkMode = undefined;
+    this.launchRetryCount = 0; // Reset retry count on cleanup
 
     try {
       if (page) {
@@ -149,15 +154,50 @@ export class Browser {
             `RESPONSE ${response.status()} ${response.url()} (cache: ${response.fromCache()})`,
           ),
         );
+
+      // Successfully launched browser, reset retry count
+      this.launchRetryCount = 0;
     } catch (err) {
       console.error("Error starting browser", err);
+      
+      // Clean up any partially created resources
       if (page) {
-        await page.close();
+        try {
+          await page.close();
+        } catch (cleanupErr) {
+          console.error("Error closing page during error cleanup:", cleanupErr);
+        }
       }
       if (browser) {
-        await browser.close();
+        try {
+          await browser.close();
+        } catch (cleanupErr) {
+          console.error("Error closing browser during error cleanup:", cleanupErr);
+        }
       }
-      throw new Error("Error starting browser");
+
+      // Increment retry count and check if we should retry or exit
+      this.launchRetryCount++;
+      
+      if (this.launchRetryCount >= this.maxRetries) {
+        console.error(
+          `Failed to launch browser after ${this.maxRetries} attempts. Exiting process to allow add-on restart.`
+        );
+        // Exit the process so the add-on can be restarted
+        process.exit(1);
+      }
+
+      // Calculate exponential backoff delay (1s, 2s, 4s, etc.)
+      const retryDelay = Math.pow(2, this.launchRetryCount - 1) * 1000;
+      console.log(
+        `Retrying browser launch in ${retryDelay}ms (attempt ${this.launchRetryCount}/${this.maxRetries})`
+      );
+      
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      
+      // Retry by calling getPage recursively
+      return this.getPage();
     }
 
     this.browser = browser;

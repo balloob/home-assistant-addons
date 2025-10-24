@@ -40,6 +40,40 @@ If you are using `eink=2`, you can also invert the colors by adding the `invert`
 http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&eink=2&invert
 ```
 
+#### Advanced dithering
+
+For better image quality on e-ink displays, you can use advanced dithering algorithms powered by the [epdoptimize](https://github.com/Utzel-Butzel/epdoptimize) library. Add the `dither` parameter to specify the dithering algorithm:
+
+```
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&eink=2&dither=floydSteinberg
+```
+
+Available dithering algorithms:
+- `floydSteinberg` (recommended) - Classic Floyd-Steinberg error diffusion
+- `falseFloydSteinberg` - Simplified Floyd-Steinberg, faster
+- `jarvis` - Jarvis, Judice, and Ninke algorithm
+- `stucki` - Stucki algorithm
+- `burkes` - Burkes algorithm
+- `sierra3` - Sierra-3 algorithm
+- `sierra2` - Reduced Sierra-3
+- `sierra2-4a` - Lightweight Sierra variant
+
+For display-specific color calibration, you can specify the display type:
+
+```
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&eink=7&dither=floydSteinberg&display=spectra6
+```
+
+Supported display types:
+- `spectra6` - E Ink Spectra 6 displays
+- `acep` - E Ink Gallery (ACeP) displays
+
+You can also enable serpentine scanning for smoother dithering:
+
+```
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&eink=2&dither=floydSteinberg&serpentine
+```
+
 It's recommended to use an e-ink theme like [Graphite](https://github.com/TilmanGriesel/graphite?tab=readme-ov-file#e-ink-themes) to optimize readability.
 
 ### Set Theme

@@ -3,6 +3,7 @@ import sharp from "sharp"; // Import sharp
 import { BMPEncoder } from "./bmp.js";
 import { debug, isAddOn, chromiumExecutable } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
+import { applyDithering } from "./dither.js";
 
 const HEADER_HEIGHT = 56;
 
@@ -371,7 +372,17 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, einkColors, invert, zoom, format, rotate }) {
+  async screenshotPage({
+    viewport,
+    einkColors,
+    invert,
+    zoom,
+    format,
+    rotate,
+    ditheringAlgorithm,
+    displayType,
+    serpentine,
+  }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -403,8 +414,31 @@ export class Browser {
         sharpInstance = sharpInstance.rotate(rotate);
       }
 
-      // Manually handle color conversion for 2 colors
-      if (einkColors === 2) {
+      // Apply dithering if eink processing is requested and algorithm is specified
+      if (einkColors && ditheringAlgorithm) {
+        // Get the current buffer to pass to dithering
+        const rotatedBuffer = await sharpInstance.png().toBuffer();
+
+        // Apply advanced dithering using epdoptimize
+        const ditheredBuffer = await applyDithering(rotatedBuffer, {
+          colors: einkColors,
+          algorithm: ditheringAlgorithm,
+          displayType: displayType,
+          serpentine: serpentine,
+        });
+
+        // Reload the dithered image into sharp for further processing
+        sharpInstance = sharp(ditheredBuffer);
+
+        // Apply invert if requested
+        if (invert) {
+          sharpInstance = sharpInstance.negate({
+            alpha: false,
+          });
+        }
+      }
+      // Fallback to basic threshold for 2 colors (backward compatibility)
+      else if (einkColors === 2) {
         sharpInstance = sharpInstance.threshold(220, {
           greyscale: true,
         });
@@ -417,7 +451,7 @@ export class Browser {
 
       // If eink processing was requested, output PNG with specified colors
       if (einkColors) {
-        if (einkColors === 2) {
+        if (einkColors === 2 && !ditheringAlgorithm) {
           sharpInstance = sharpInstance.toColourspace("b-w");
         }
         if (format == "bmp") {

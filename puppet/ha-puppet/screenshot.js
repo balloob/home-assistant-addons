@@ -69,10 +69,6 @@ export class Browser {
     this.lastRequestedLang = undefined;
     this.lastRequestedTheme = undefined;
     this.lastRequestedDarkMode = undefined;
-
-    // Retry tracking for browser launch failures
-    this.launchRetryCount = 0;
-    this.maxRetries = 3;
   }
 
   async cleanup() {
@@ -88,7 +84,6 @@ export class Browser {
     this.lastRequestedLang = undefined;
     this.lastRequestedTheme = undefined;
     this.lastRequestedDarkMode = undefined;
-    this.launchRetryCount = 0; // Reset retry count on cleanup
 
     try {
       if (page) {
@@ -114,91 +109,42 @@ export class Browser {
       return this.page;
     }
 
-    let browser;
-    let page;
+    console.log("Starting browser");
+    const browser = await puppeteer.launch({
+      headless: "shell",
+      executablePath: chromiumExecutable,
+      args: puppeteerArgs,
+    });
+    const page = await browser.newPage();
 
-    try {
-      console.log("Starting browser");
-      browser = await puppeteer.launch({
-        headless: "shell",
-        executablePath: chromiumExecutable,
-        args: puppeteerArgs,
-      });
-      page = await browser.newPage();
-
-      // Route all log messages from browser to our add-on log
-      // https://pptr.dev/api/puppeteer.pageevents
-      page
-        .on("framenavigated", (frame) =>
-          // Why are we seeing so many frame navigated ??
-          console.log("Frame navigated", frame.url()),
-        )
-        .on("console", (message) =>
-          console.log(
-            `CONSOLE ${message
-              .type()
-              .substr(0, 3)
-              .toUpperCase()} ${message.text()}`,
-          ),
-        )
-        .on("error", (err) => console.error("ERROR", err))
-        .on("pageerror", ({ message }) => console.log("PAGE ERROR", message))
-        .on("requestfailed", (request) =>
-          console.log(
-            `REQUEST-FAILED ${request.failure().errorText} ${request.url()}`,
-          ),
-        );
-      if (debug)
-        page.on("response", (response) =>
-          console.log(
-            `RESPONSE ${response.status()} ${response.url()} (cache: ${response.fromCache()})`,
-          ),
-        );
-
-      // Successfully launched browser, reset retry count
-      this.launchRetryCount = 0;
-    } catch (err) {
-      console.error("Error starting browser", err);
-      
-      // Clean up any partially created resources
-      if (page) {
-        try {
-          await page.close();
-        } catch (cleanupErr) {
-          console.error("Error closing page during error cleanup:", cleanupErr);
-        }
-      }
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (cleanupErr) {
-          console.error("Error closing browser during error cleanup:", cleanupErr);
-        }
-      }
-
-      // Increment retry count and check if we should retry or exit
-      this.launchRetryCount++;
-      
-      if (this.launchRetryCount >= this.maxRetries) {
-        console.error(
-          `Failed to launch browser after ${this.maxRetries} attempts. Exiting process to allow add-on restart.`
-        );
-        // Exit the process so the add-on can be restarted
-        process.exit(1);
-      }
-
-      // Calculate exponential backoff delay (1s, 2s, 4s, etc.)
-      const retryDelay = Math.pow(2, this.launchRetryCount - 1) * 1000;
-      console.log(
-        `Retrying browser launch in ${retryDelay}ms (attempt ${this.launchRetryCount}/${this.maxRetries})`
+    // Route all log messages from browser to our add-on log
+    // https://pptr.dev/api/puppeteer.pageevents
+    page
+      .on("framenavigated", (frame) =>
+        // Why are we seeing so many frame navigated ??
+        console.log("Frame navigated", frame.url()),
+      )
+      .on("console", (message) =>
+        console.log(
+          `CONSOLE ${message
+            .type()
+            .substr(0, 3)
+            .toUpperCase()} ${message.text()}`,
+        ),
+      )
+      .on("error", (err) => console.error("ERROR", err))
+      .on("pageerror", ({ message }) => console.log("PAGE ERROR", message))
+      .on("requestfailed", (request) =>
+        console.log(
+          `REQUEST-FAILED ${request.failure().errorText} ${request.url()}`,
+        ),
       );
-      
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      
-      // Retry by calling getPage recursively
-      return this.getPage();
-    }
+    if (debug)
+      page.on("response", (response) =>
+        console.log(
+          `RESPONSE ${response.status()} ${response.url()} (cache: ${response.fromCache()})`,
+        ),
+      );
 
     this.browser = browser;
     this.page = page;

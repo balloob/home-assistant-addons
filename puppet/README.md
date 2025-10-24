@@ -100,10 +100,6 @@ The add-on includes fonts for CJK (Chinese, Japanese, Korean) languages to ensur
 http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&lang=nl
 ```
 
-```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&lang=ko
-```
-
 ### Set Dark Mode
 
 You can enable dark mode for the screenshot by adding the `dark` query parameter. This parameter doesn't require a value.

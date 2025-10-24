@@ -94,8 +94,6 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&rotate=90
 
 You can set the language of the Home Assistant interface for the screenshot by adding the `lang` query parameter. The value should be a language code that Home Assistant supports (e.g., `en`, `nl`, `de`, `ko`, `ja`, `zh-Hans`, `zh-Hant`).
 
-The add-on includes fonts for CJK (Chinese, Japanese, Korean) languages to ensure proper rendering of non-Latin characters.
-
 ```
 http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&lang=nl
 ```

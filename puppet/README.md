@@ -44,10 +44,10 @@ It's recommended to use an e-ink theme like [Graphite](https://github.com/Tilman
 
 ### Set Theme
 
-You can set the theme of the Home Assistant interface for the screenshot by adding the `theme` query parameter. The value should be a theme name that Home Assistant supports (e.g., `default`, `my-custom-theme`).
+You can set the theme of the Home Assistant interface for the screenshot by adding the `theme` query parameter. The value should be a theme name that Home Assistant supports (e.g., `Graphite E-ink Light`).
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&theme=my-custom-theme
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&theme=Graphite%20E-ink%20Light
 ```
 
 ### Finish loading detection

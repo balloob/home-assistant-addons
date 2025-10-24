@@ -108,6 +108,14 @@ class RequestHandler {
         einkColors = undefined;
       }
 
+      // Supported colours as hex: colors=FF0000,00FF00,0000FF,... or colors=#FF0000,#00FF00,#0000FF,...
+      let colors = (requestUrl.searchParams.get("colors") || "")
+        .split(",")
+        .map((color) => color.trim())
+        .map((color) => color.startsWith("#") ? color : `#${color}`)
+        .filter((color) => /^#[0-9A-F]{6}$/i.test(color));
+
+
       let zoom = parseFloat(requestUrl.searchParams.get("zoom"));
       if (isNaN(zoom) || zoom <= 0) {
         zoom = 1;
@@ -129,11 +137,19 @@ class RequestHandler {
       const theme = requestUrl.searchParams.get("theme") || undefined;
       const dark = requestUrl.searchParams.has("dark");
 
+      // Dithering algorithm: floyd-steinberg, atkinson, none
+      let dithering = requestUrl.searchParams.get("dithering") || "none";
+      if (!["floyd-steinberg", "atkinson", "none"].includes(dithering)) {
+        dithering = "none";
+      }
+
       const requestParams = {
         pagePath: requestUrl.pathname,
         viewport: { width: viewportParams[0], height: viewportParams[1] },
         extraWait,
         einkColors,
+        colors,
+        dithering,
         invert,
         zoom,
         format,

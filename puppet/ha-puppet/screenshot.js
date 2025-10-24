@@ -110,6 +110,8 @@ export class Browser {
     }
 
     console.log("Starting browser");
+    // We don't catch these errors on purpose, as we're
+    // not able to recover once the app fails to start.
     const browser = await puppeteer.launch({
       headless: "shell",
       executablePath: chromiumExecutable,

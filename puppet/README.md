@@ -12,8 +12,11 @@ _This is a prototype, there is NO security. Anyone can access the server and mak
 
 ## Configuration
 
-- home_assistant_url: Base URL of your Home Assistant instance that the add-on browser should open when taking screenshots. Defaults to http://homeassistant:8123 when running as an add-on. You can override it if your instance is reachable via a different hostname or port (e.g., http://my-ha.local:8123 or https://example.duckdns.org).
 - access_token: Long-lived access token used to authenticate against Home Assistant.
+
+## Advanced configuration
+
+- home_assistant_url: Base URL of your Home Assistant instance that the add-on browser should open when taking screenshots. Defaults to `http://homeassistant:8123` which is the internal URL at which the add-on can reach Home Assistant. You can override it if your instance has configured SSL certificates inside Home Assistant and requires to be reached via a different hostname or port (e.g., http://my-ha.local:8123 or https://example.duckdns.org).
 - keep_browser_open: If true, keeps the Chromium browser alive between requests.
 
 ## Usage
@@ -117,6 +120,10 @@ http://homeassistant.local:10000/lovelace/0?next=300
 ```
 
 Providing a `next` parameter will not affect the current request. It will only be used for the next request.
+
+## Proxmox
+
+If you're running Home Assistant OS in a virtual machine under Proxmox, make sure the host type of your virtual machine is set to `host`.
 
 ## Speed (or lack thereof)
 

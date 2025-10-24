@@ -129,6 +129,12 @@ class RequestHandler {
       const theme = requestUrl.searchParams.get("theme") || undefined;
       const dark = requestUrl.searchParams.has("dark");
 
+      // Dithering parameters
+      const ditheringAlgorithm =
+        requestUrl.searchParams.get("dither") || undefined;
+      const displayType = requestUrl.searchParams.get("display") || undefined;
+      const serpentine = requestUrl.searchParams.has("serpentine");
+
       const requestParams = {
         pagePath: requestUrl.pathname,
         viewport: { width: viewportParams[0], height: viewportParams[1] },
@@ -141,6 +147,9 @@ class RequestHandler {
         lang,
         theme,
         dark,
+        ditheringAlgorithm,
+        displayType,
+        serpentine,
       };
 
       // Extract next param and schedule if necessary

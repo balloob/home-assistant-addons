@@ -150,26 +150,14 @@ class RequestHandler {
         next = undefined;
       }
 
+      // We removed error handling on this block so the add-on crashes and watchdog recovers
       let image;
-      try {
-        const navigateResult = await this.browser.navigatePage(requestParams);
-        console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
-        this.navigationTime = Math.max(
-          this.navigationTime,
-          navigateResult.time,
-        );
-        const screenshotResult = await this.browser.screenshotPage(
-          requestParams,
-        );
-        console.debug(requestId, `Screenshot in ${screenshotResult.time} ms`);
-        image = screenshotResult.image;
-      } catch (err) {
-        console.error(requestId, "Error generating screenshot", err);
-        response.statusCode =
-          err instanceof CannotOpenPageError ? err.status : 500;
-        response.end();
-        return;
-      }
+      const navigateResult = await this.browser.navigatePage(requestParams);
+      console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
+      this.navigationTime = Math.max(this.navigationTime, navigateResult.time);
+      const screenshotResult = await this.browser.screenshotPage(requestParams);
+      console.debug(requestId, `Screenshot in ${screenshotResult.time} ms`);
+      image = screenshotResult.image;
 
       // If eink processing happened, the format could be png or bmp
       const responseFormat = format;

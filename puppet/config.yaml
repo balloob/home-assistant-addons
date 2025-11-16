@@ -9,6 +9,7 @@ arch:
   - amd64
 ports:
   10000/tcp: 10000
+webui: "http://[HOST]:[PORT:10000]/"
 options:
   access_token: ""
   keep_browser_open: false

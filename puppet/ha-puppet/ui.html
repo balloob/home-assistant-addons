@@ -1,281 +1,677 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Puppet - Screenshot Preview</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        .preview-container {
-            max-width: 100%;
-            overflow: auto;
-        }
-        .preview-img {
-            max-width: 100%;
-            height: auto;
-            border: 2px solid #3b82f6;
-            border-radius: 8px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        }
-        .loading {
-            opacity: 0.5;
-            pointer-events: none;
-        }
+      :root {
+        --ha-blue: #03a9f4;
+        --ha-blue-dark: #0288d1;
+        --ha-blue-light: #4fc3f7;
+      }
+      body {
+        background: linear-gradient(135deg, #03a9f4 0%, #0288d1 100%);
+        min-height: 100vh;
+      }
+      .preview-container {
+        max-width: 100%;
+        overflow: auto;
+      }
+      .preview-img {
+        max-width: 100%;
+        height: auto;
+        border: 2px solid var(--ha-blue);
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      }
+      .loading {
+        opacity: 0.5;
+        pointer-events: none;
+      }
     </style>
-</head>
-<body class="p-4">
+  </head>
+  <body class="p-4">
     <div class="container mx-auto max-w-7xl">
-        <!-- Header -->
-        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h1 class="text-3xl font-bold text-blue-800">Puppet Screenshot Preview</h1>
-            <p class="text-gray-600 mt-2">Configure and preview Home Assistant dashboard screenshots</p>
-        </div>
+      <!-- Main Content -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Form Section -->
+        <div class="lg:col-span-1 bg-white rounded-lg shadow-lg p-6">
+          <h2
+            class="text-xl font-semibold mb-4"
+            style="color: var(--ha-blue-dark)"
+          >
+            Screenshot Settings
+          </h2>
 
-        <!-- Main Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Form Section -->
-            <div class="lg:col-span-1 bg-white rounded-lg shadow-lg p-6">
-                <h2 class="text-xl font-semibold text-blue-700 mb-4">Screenshot Settings</h2>
-
-                <form id="screenshotForm" class="space-y-4">
-                    <!-- Path -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Path</label>
-                        <input type="text" id="path" value="/"
-                            class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="/lovelace/0">
-                    </div>
-
-                    <!-- Viewport Width -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Viewport Width</label>
-                        <input type="number" id="width" value="1000" min="100" max="4000"
-                            class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-
-                    <!-- Viewport Height -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Viewport Height</label>
-                        <input type="number" id="height" value="1000" min="100" max="4000"
-                            class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-
-                    <!-- Format -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Format</label>
-                        <select id="format" class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            <option value="png">PNG</option>
-                            <option value="jpeg">JPEG</option>
-                            <option value="webp">WebP</option>
-                            <option value="bmp">BMP</option>
-                        </select>
-                    </div>
-
-                    <!-- Theme -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Theme (optional)</label>
-                        <input type="text" id="theme"
-                            class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="e.g., Graphite E-ink Light">
-                    </div>
-
-                    <!-- Dark Mode -->
-                    <div class="flex items-center">
-                        <input type="checkbox" id="dark" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                        <label for="dark" class="ml-2 block text-sm text-gray-700">Dark Mode</label>
-                    </div>
-
-                    <!-- Zoom -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Zoom (optional)</label>
-                        <input type="number" id="zoom" step="0.1" min="0.1" max="5"
-                            class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="1.0">
-                    </div>
-
-                    <!-- Wait Time -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Wait Time (ms, optional)</label>
-                        <input type="number" id="wait" step="100" min="0"
-                            class="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="0">
-                    </div>
-
-                    <!-- Preview Button -->
-                    <button type="submit"
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md transition duration-200 shadow-md hover:shadow-lg">
-                        Preview Screenshot
-                    </button>
-                </form>
-
-                <!-- Generated URL -->
-                <div class="mt-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Generated URL</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="generatedUrl" readonly
-                            class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm font-mono"
-                            value="">
-                        <button onclick="copyUrl()"
-                            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition duration-200">
-                            Copy
-                        </button>
-                    </div>
-                    <p id="copyFeedback" class="text-sm text-green-600 mt-1 hidden">URL copied to clipboard!</p>
-                </div>
+          <form id="screenshotForm" class="space-y-4">
+            <!-- Path -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Path</label
+              >
+              <input
+                type="text"
+                id="path"
+                value="/"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+                placeholder="/lovelace/0"
+              />
             </div>
 
-            <!-- Preview Section -->
-            <div class="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
-                <h2 class="text-xl font-semibold text-blue-700 mb-4">Preview</h2>
-
-                <div id="loadingIndicator" class="hidden text-center py-12">
-                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-                    <p class="mt-4 text-gray-600">Generating screenshot...</p>
-                </div>
-
-                <div id="errorMessage" class="hidden bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-md mb-4">
-                    <p class="font-semibold">Error</p>
-                    <p id="errorText"></p>
-                </div>
-
-                <div class="preview-container" id="previewContainer">
-                    <img id="previewImage" src="" alt="Screenshot preview will appear here" class="preview-img hidden">
-                    <div id="placeholderText" class="text-center py-24 text-gray-400">
-                        <svg class="mx-auto h-24 w-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p class="text-lg">Click "Preview Screenshot" to generate an image</p>
-                    </div>
-                </div>
+            <!-- Viewport Width -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Viewport Width</label
+              >
+              <input
+                type="number"
+                id="width"
+                value="1000"
+                min="100"
+                max="4000"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+              />
             </div>
+
+            <!-- Viewport Height -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Viewport Height</label
+              >
+              <input
+                type="number"
+                id="height"
+                value="1000"
+                min="100"
+                max="4000"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+              />
+            </div>
+
+            <!-- Next -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Auto-refresh Interval (seconds, optional)</label
+              >
+              <input
+                type="number"
+                id="next"
+                min="1"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+                placeholder="e.g., 30, 60"
+              />
+              <p class="text-xs text-gray-500 mt-1">
+                The server will warm up the browser just before your code sends
+                the update request, speeding up the response time.
+              </p>
+            </div>
+
+            <!-- Theme -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Theme (optional)</label
+              >
+              <input
+                type="text"
+                id="theme"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+                placeholder="e.g., Graphite E-ink Light"
+              />
+            </div>
+
+            <!-- Dark Mode -->
+            <div class="flex items-center">
+              <input
+                type="checkbox"
+                id="dark"
+                class="h-4 w-4 border-gray-300 rounded"
+                style="color: var(--ha-blue); --tw-ring-color: var(--ha-blue)"
+              />
+              <label for="dark" class="ml-2 block text-sm text-gray-700"
+                >Dark Mode</label
+              >
+            </div>
+
+            <!-- Zoom -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Zoom (optional)</label
+              >
+              <input
+                type="number"
+                id="zoom"
+                step="0.1"
+                min="0.1"
+                max="5"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+                placeholder="1.0"
+              />
+            </div>
+
+            <!-- Language -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Language (optional)</label
+              >
+              <input
+                type="text"
+                id="lang"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+                placeholder="e.g., en, nl, de"
+              />
+            </div>
+
+            <!-- Advanced Settings Accordion -->
+            <div class="border-t pt-4">
+              <button
+                type="button"
+                id="advancedToggle"
+                class="w-full flex items-center justify-between text-sm font-medium text-gray-700 hover:text-gray-900"
+                onclick="toggleAdvanced()"
+              >
+                <span>Advanced Settings</span>
+                <svg
+                  id="advancedIcon"
+                  class="w-5 h-5 transition-transform"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+
+              <div id="advancedSettings" class="hidden mt-4 space-y-4">
+                <!-- Format -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1"
+                    >Format</label
+                  >
+                  <select
+                    id="format"
+                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                    style="
+                      border-color: var(--ha-blue-light);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                  >
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPEG</option>
+                    <option value="webp">WebP</option>
+                    <option value="bmp">BMP</option>
+                  </select>
+                </div>
+
+                <!-- Wait Time -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1"
+                    >Wait Time (ms)</label
+                  >
+                  <input
+                    type="number"
+                    id="wait"
+                    step="100"
+                    min="0"
+                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                    style="
+                      border-color: var(--ha-blue-light);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                    placeholder="0"
+                  />
+                  <p class="text-xs text-gray-500 mt-1">
+                    The server will warm up the browser just before your code
+                    sends the update request, speeding up the response time.
+                  </p>
+                </div>
+
+                <!-- E-ink Colors -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1"
+                    >E-ink Colors</label
+                  >
+                  <input
+                    type="number"
+                    id="eink"
+                    min="2"
+                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                    style="
+                      border-color: var(--ha-blue-light);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                    placeholder="e.g., 2, 4, 7"
+                  />
+                </div>
+
+                <!-- Rotation -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1"
+                    >Rotation</label
+                  >
+                  <select
+                    id="rotate"
+                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                    style="
+                      border-color: var(--ha-blue-light);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                  >
+                    <option value="">None</option>
+                    <option value="90">90°</option>
+                    <option value="180">180°</option>
+                    <option value="270">270°</option>
+                  </select>
+                </div>
+
+                <!-- Invert -->
+                <div class="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="invert"
+                    class="h-4 w-4 border-gray-300 rounded"
+                    style="
+                      color: var(--ha-blue);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                  />
+                  <label for="invert" class="ml-2 block text-sm text-gray-700"
+                    >Invert Colors</label
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- Hidden submit button to enable Enter key submission -->
+            <button type="submit" class="hidden">Submit</button>
+          </form>
         </div>
+
+        <!-- Preview Section -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2
+              class="text-xl font-semibold"
+              style="color: var(--ha-blue-dark)"
+            >
+              Preview
+            </h2>
+            <div id="loadTime" class="text-sm text-gray-600 hidden">
+              <span class="font-semibold">Load time:</span>
+              <span id="loadTimeValue"></span>
+            </div>
+          </div>
+
+          <!-- Generated URL -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Generated URL</label
+            >
+            <div class="flex gap-2">
+              <input
+                type="text"
+                id="generatedUrl"
+                readonly
+                class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm font-mono"
+                value=""
+              />
+              <button
+                onclick="loadPreview(event)"
+                class="px-4 py-2 text-white rounded-md transition duration-200 shadow-md"
+                style="background-color: var(--ha-blue)"
+                onmouseover="this.style.backgroundColor='var(--ha-blue-dark)'"
+                onmouseout="this.style.backgroundColor='var(--ha-blue)'"
+              >
+                Preview
+              </button>
+              <button
+                onclick="copyUrl()"
+                class="px-4 py-2 text-white rounded-md transition duration-200"
+                style="background-color: #10b981"
+                onmouseover="this.style.backgroundColor='#059669'"
+                onmouseout="this.style.backgroundColor='#10b981'"
+              >
+                Copy
+              </button>
+            </div>
+            <p
+              id="copyFeedback"
+              class="text-sm mt-1 hidden"
+              style="color: #10b981"
+            >
+              URL copied to clipboard!
+            </p>
+          </div>
+
+          <div id="loadingIndicator" class="hidden text-center py-12">
+            <div
+              class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-t-transparent"
+              style="
+                border-color: var(--ha-blue);
+                border-top-color: transparent;
+              "
+            ></div>
+            <p class="mt-4 text-gray-600">Generating screenshot...</p>
+          </div>
+
+          <div
+            id="errorMessage"
+            class="hidden bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-md mb-4"
+          >
+            <p class="font-semibold">Error</p>
+            <p id="errorText"></p>
+          </div>
+
+          <div class="preview-container" id="previewContainer">
+            <img
+              id="previewImage"
+              src=""
+              alt="Screenshot preview will appear here"
+              class="preview-img hidden"
+            />
+            <div id="placeholderText" class="text-center py-24 text-gray-400">
+              <svg
+                class="mx-auto h-24 w-24 mb-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p class="text-lg">
+                Click "Preview Screenshot" to generate an image
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
-        // Build URL from form parameters
-        function buildUrl() {
-            const path = document.getElementById('path').value || '/';
-            const width = document.getElementById('width').value;
-            const height = document.getElementById('height').value;
-            const format = document.getElementById('format').value;
-            const theme = document.getElementById('theme').value;
-            const dark = document.getElementById('dark').checked;
-            const zoom = document.getElementById('zoom').value;
-            const wait = document.getElementById('wait').value;
+      // Save settings to localStorage
+      function saveSettings() {
+        const settings = {
+          path: document.getElementById("path").value,
+          width: document.getElementById("width").value,
+          height: document.getElementById("height").value,
+          format: document.getElementById("format").value,
+          theme: document.getElementById("theme").value,
+          dark: document.getElementById("dark").checked,
+          zoom: document.getElementById("zoom").value,
+          wait: document.getElementById("wait").value,
+          lang: document.getElementById("lang").value,
+          eink: document.getElementById("eink").value,
+          rotate: document.getElementById("rotate").value,
+          invert: document.getElementById("invert").checked,
+          next: document.getElementById("next").value,
+        };
+        localStorage.setItem("puppetSettings", JSON.stringify(settings));
+      }
 
-            // Build query parameters
-            const params = new URLSearchParams();
-            params.append('viewport', `${width}x${height}`);
+      // Load settings from localStorage
+      function loadSettings() {
+        const saved = localStorage.getItem("puppetSettings");
+        if (!saved) return;
 
-            if (format && format !== 'png') {
-                params.append('format', format);
-            }
+        try {
+          const settings = JSON.parse(saved);
 
-            if (theme) {
-                params.append('theme', theme);
-            }
+          if (settings.path !== undefined)
+            document.getElementById("path").value = settings.path;
+          if (settings.width !== undefined)
+            document.getElementById("width").value = settings.width;
+          if (settings.height !== undefined)
+            document.getElementById("height").value = settings.height;
+          if (settings.format !== undefined)
+            document.getElementById("format").value = settings.format;
+          if (settings.theme !== undefined)
+            document.getElementById("theme").value = settings.theme;
+          if (settings.dark !== undefined)
+            document.getElementById("dark").checked = settings.dark;
+          if (settings.zoom !== undefined)
+            document.getElementById("zoom").value = settings.zoom;
+          if (settings.wait !== undefined)
+            document.getElementById("wait").value = settings.wait;
+          if (settings.lang !== undefined)
+            document.getElementById("lang").value = settings.lang;
+          if (settings.eink !== undefined)
+            document.getElementById("eink").value = settings.eink;
+          if (settings.rotate !== undefined)
+            document.getElementById("rotate").value = settings.rotate;
+          if (settings.invert !== undefined)
+            document.getElementById("invert").checked = settings.invert;
+          if (settings.next !== undefined)
+            document.getElementById("next").value = settings.next;
+        } catch (e) {
+          console.error("Error loading settings:", e);
+        }
+      }
 
-            if (dark) {
-                params.append('dark', '');
-            }
+      // Toggle advanced settings accordion
+      function toggleAdvanced() {
+        const advancedSettings = document.getElementById("advancedSettings");
+        const advancedIcon = document.getElementById("advancedIcon");
 
-            if (zoom) {
-                params.append('zoom', zoom);
-            }
+        if (advancedSettings.classList.contains("hidden")) {
+          advancedSettings.classList.remove("hidden");
+          advancedIcon.style.transform = "rotate(180deg)";
+        } else {
+          advancedSettings.classList.add("hidden");
+          advancedIcon.style.transform = "rotate(0deg)";
+        }
+      }
 
-            if (wait) {
-                params.append('wait', wait);
-            }
+      // Build URL from form parameters
+      function buildUrl() {
+        const path = document.getElementById("path").value || "/";
+        const width = document.getElementById("width").value;
+        const height = document.getElementById("height").value;
+        const format = document.getElementById("format").value;
+        const theme = document.getElementById("theme").value;
+        const dark = document.getElementById("dark").checked;
+        const zoom = document.getElementById("zoom").value;
+        const wait = document.getElementById("wait").value;
+        const lang = document.getElementById("lang").value;
+        const eink = document.getElementById("eink").value;
+        const rotate = document.getElementById("rotate").value;
+        const invert = document.getElementById("invert").checked;
+        const next = document.getElementById("next").value;
 
-            // Construct full URL
-            const baseUrl = window.location.origin;
-            const fullPath = path.startsWith('/') ? path : '/' + path;
-            const url = `${baseUrl}${fullPath}?${params.toString()}`;
+        // Build query parameters
+        const params = new URLSearchParams();
+        params.append("viewport", `${width}x${height}`);
 
-            return url;
+        if (format && format !== "png") {
+          params.append("format", format);
         }
 
-        // Update the displayed URL
-        function updateUrl() {
-            const url = buildUrl();
-            document.getElementById('generatedUrl').value = url;
+        if (theme) {
+          params.append("theme", theme);
         }
 
-        // Copy URL to clipboard
-        function copyUrl() {
-            const urlInput = document.getElementById('generatedUrl');
-            urlInput.select();
-            document.execCommand('copy');
-
-            const feedback = document.getElementById('copyFeedback');
-            feedback.classList.remove('hidden');
-            setTimeout(() => {
-                feedback.classList.add('hidden');
-            }, 2000);
+        if (dark) {
+          params.append("dark", "");
         }
 
-        // Load preview image
-        async function loadPreview(e) {
-            if (e) e.preventDefault();
-
-            const url = buildUrl();
-            const previewImage = document.getElementById('previewImage');
-            const loadingIndicator = document.getElementById('loadingIndicator');
-            const errorMessage = document.getElementById('errorMessage');
-            const placeholderText = document.getElementById('placeholderText');
-
-            // Show loading state
-            loadingIndicator.classList.remove('hidden');
-            errorMessage.classList.add('hidden');
-            previewImage.classList.add('hidden');
-            placeholderText.classList.add('hidden');
-
-            try {
-                // Fetch the screenshot
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                // Create blob URL for the image
-                const blob = await response.blob();
-                const imageUrl = URL.createObjectURL(blob);
-
-                // Display the image
-                previewImage.src = imageUrl;
-                previewImage.classList.remove('hidden');
-
-            } catch (error) {
-                console.error('Error loading preview:', error);
-                document.getElementById('errorText').textContent = error.message;
-                errorMessage.classList.remove('hidden');
-                placeholderText.classList.remove('hidden');
-            } finally {
-                loadingIndicator.classList.add('hidden');
-            }
+        if (zoom) {
+          params.append("zoom", zoom);
         }
 
-        // Form submission handler
-        document.getElementById('screenshotForm').addEventListener('submit', loadPreview);
+        if (wait) {
+          params.append("wait", wait);
+        }
 
-        // Update URL when any input changes
-        document.querySelectorAll('#screenshotForm input, #screenshotForm select').forEach(input => {
-            input.addEventListener('input', updateUrl);
-            input.addEventListener('change', updateUrl);
+        if (lang) {
+          params.append("lang", lang);
+        }
+
+        if (eink) {
+          params.append("eink", eink);
+        }
+
+        if (rotate) {
+          params.append("rotate", rotate);
+        }
+
+        if (invert) {
+          params.append("invert", "");
+        }
+
+        if (next) {
+          params.append("next", next);
+        }
+
+        // Construct full URL
+        const baseUrl = window.location.origin;
+        const fullPath = path.startsWith("/") ? path : "/" + path;
+        const url = `${baseUrl}${fullPath}?${params.toString()}`;
+
+        return url;
+      }
+
+      // Update the displayed URL
+      function updateUrl() {
+        const url = buildUrl();
+        document.getElementById("generatedUrl").value = url;
+      }
+
+      // Copy URL to clipboard
+      function copyUrl() {
+        const urlInput = document.getElementById("generatedUrl");
+        urlInput.select();
+        document.execCommand("copy");
+
+        const feedback = document.getElementById("copyFeedback");
+        feedback.classList.remove("hidden");
+        setTimeout(() => {
+          feedback.classList.add("hidden");
+        }, 2000);
+      }
+
+      // Load preview image
+      async function loadPreview(e) {
+        if (e) e.preventDefault();
+
+        const url = buildUrl();
+        const previewImage = document.getElementById("previewImage");
+        const loadingIndicator = document.getElementById("loadingIndicator");
+        const errorMessage = document.getElementById("errorMessage");
+        const placeholderText = document.getElementById("placeholderText");
+        const loadTimeDiv = document.getElementById("loadTime");
+        const loadTimeValue = document.getElementById("loadTimeValue");
+
+        // Hide load time while loading
+        loadTimeDiv.classList.add("hidden");
+
+        // Show loading state
+        loadingIndicator.classList.remove("hidden");
+        errorMessage.classList.add("hidden");
+        previewImage.classList.add("hidden");
+        placeholderText.classList.add("hidden");
+
+        // Track start time
+        const startTime = performance.now();
+
+        try {
+          // Fetch the screenshot
+          const response = await fetch(url);
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          // Create blob URL for the image
+          const blob = await response.blob();
+          const imageUrl = URL.createObjectURL(blob);
+
+          // Calculate load time
+          const endTime = performance.now();
+          const loadDuration = Math.round(endTime - startTime);
+
+          // Display the image
+          previewImage.src = imageUrl;
+          previewImage.classList.remove("hidden");
+
+          // Show load time
+          loadTimeValue.textContent = `${loadDuration} ms`;
+          loadTimeDiv.classList.remove("hidden");
+        } catch (error) {
+          console.error("Error loading preview:", error);
+          document.getElementById("errorText").textContent = error.message;
+          errorMessage.classList.remove("hidden");
+          placeholderText.classList.remove("hidden");
+        } finally {
+          loadingIndicator.classList.add("hidden");
+        }
+      }
+
+      // Form submission handler (triggered by pressing Enter in any field)
+      document
+        .getElementById("screenshotForm")
+        .addEventListener("submit", (e) => {
+          e.preventDefault();
+          loadPreview(e);
         });
 
-        // Initialize URL on page load
+      // Update URL and save settings when any input changes
+      document
+        .querySelectorAll("#screenshotForm input, #screenshotForm select")
+        .forEach((input) => {
+          input.addEventListener("input", () => {
+            updateUrl();
+            saveSettings();
+          });
+          input.addEventListener("change", () => {
+            updateUrl();
+            saveSettings();
+          });
+        });
+
+      // Load settings and initialize on page load
+      window.addEventListener("load", () => {
+        loadSettings();
         updateUrl();
-
-        // Auto-load preview on page load with default settings
-        window.addEventListener('load', () => {
-            loadPreview();
-        });
+        loadPreview();
+      });
     </script>
-</body>
+  </body>
 </html>

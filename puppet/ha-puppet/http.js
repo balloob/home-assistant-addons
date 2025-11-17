@@ -177,7 +177,18 @@ class RequestHandler {
 
       // We removed error handling on this block so the add-on crashes and watchdog recovers
       let image;
-      const navigateResult = await this.browser.navigatePage(requestParams);
+      let navigateResult = null;
+      try {
+        navigateResult = await this.browser.navigatePage(requestParams);
+      } catch (err) {
+        if (err instanceof CannotOpenPageError) {
+          console.error(requestId, `Cannot open page: ${err.message}`);
+          response.statusCode = 404;
+          response.end(`Cannot open page: ${err.message}`);
+          return;
+        }
+        throw err;
+      }
       console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
       this.navigationTime = Math.max(this.navigationTime, navigateResult.time);
       const screenshotResult = await this.browser.screenshotPage(requestParams);
@@ -282,6 +293,4 @@ const now = new Date();
 const serverUrl = isAddOn
   ? `http://homeassistant.local:${port}`
   : `http://localhost:${port}`;
-console.log(
-  `[${now.toLocaleTimeString()}] Visit server at ${serverUrl}/lovelace/0?viewport=1000x1000`,
-);
+console.log(`[${now.toLocaleTimeString()}] Visit server at ${serverUrl}`);

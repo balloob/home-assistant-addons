@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.0
+
+- Add URL parameter syncing: all form settings are now represented in the browser URL for easy sharing
+- Add screenshot URL import feature with modal dialog
+- Auto-preview when changing theme, dark mode, color inversion, format, or rotation
+- Simplify footer design with centered attribution link
+- Change default path from `/` to `/lovelace`
+
 ## 2.1.0
 
 - Fetch Home Assistant data (themes, network URLs, language) and inject into UI

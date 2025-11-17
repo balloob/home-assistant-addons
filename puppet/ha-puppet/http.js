@@ -62,14 +62,15 @@ class RequestHandler {
   }
 
   async handleRequest(request, response) {
-    if (request.url === "/favicon.ico") {
+    const requestUrl = new URL(request.url, "http://localhost");
+
+    if (requestUrl.pathname === "/favicon.ico") {
       response.statusCode = 404;
       response.end();
       return;
     }
 
-    // Serve UI page for root path
-    if (request.url === "/") {
+    if (requestUrl.pathname === "/") {
       await handleUIRequest(response);
       return;
     }
@@ -88,11 +89,6 @@ class RequestHandler {
 
     try {
       console.debug(requestId, "Handling", request.url);
-      const requestUrl = new URL(
-        request.url,
-        // We don't use this, but we need full URL for parsing.
-        "http://localhost",
-      );
 
       let extraWait = parseInt(requestUrl.searchParams.get("wait"));
       if (isNaN(extraWait)) {

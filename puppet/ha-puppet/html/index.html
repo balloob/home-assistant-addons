@@ -38,12 +38,34 @@
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Form Section -->
         <div class="lg:col-span-1 bg-white rounded-lg shadow-lg p-6">
-          <h2
-            class="text-xl font-semibold mb-4"
-            style="color: var(--ha-blue-dark)"
-          >
-            Screenshot Settings
-          </h2>
+          <div class="flex items-center justify-between mb-4">
+            <h2
+              class="text-xl font-semibold"
+              style="color: var(--ha-blue-dark)"
+            >
+              Screenshot Settings
+            </h2>
+            <button
+              onclick="showImportDialog()"
+              class="p-2 rounded-md transition duration-200 hover:bg-gray-100"
+              title="Import screenshot URL"
+              style="color: var(--ha-blue)"
+            >
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
+                />
+              </svg>
+            </button>
+          </div>
 
           <form id="screenshotForm" class="space-y-4">
             <!-- Path -->
@@ -54,13 +76,13 @@
               <input
                 type="text"
                 id="path"
-                value="/"
+                value="/lovelace"
                 class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
                 style="
                   border-color: var(--ha-blue-light);
                   --tw-ring-color: var(--ha-blue);
                 "
-                placeholder="/lovelace/0"
+                placeholder="/lovelace"
               />
             </div>
 
@@ -120,7 +142,7 @@
               />
               <p class="text-xs text-gray-500 mt-1">
                 The server will warm up the browser just before your code
-                fetches the screenshot, speeding up the response time.
+                fetches the next screenshot, speeding up the response time.
               </p>
             </div>
 
@@ -435,6 +457,90 @@
           </div>
         </div>
       </div>
+
+      <!-- Footer -->
+      <div class="mt-6 text-center">
+        <a
+          href="https://github.com/balloob/home-assistant-addons/blob/main/puppet/README.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-white font-bold hover:underline opacity-80 hover:opacity-100 transition-opacity"
+          >Puppet by Balloob</a
+        >
+      </div>
+    </div>
+
+    <!-- Import URL Dialog -->
+    <div
+      id="importDialog"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold" style="color: var(--ha-blue-dark)">
+            Import Screenshot URL
+          </h3>
+          <button
+            onclick="hideImportDialog()"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-4">
+          Paste a screenshot URL to load its settings into the form.
+        </p>
+
+        <input
+          type="text"
+          id="importUrlInput"
+          placeholder="e.g., /lovelace/0?viewport=1000x600&theme=midnight"
+          class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent font-mono text-sm mb-2"
+          style="
+            border-color: var(--ha-blue-light);
+            --tw-ring-color: var(--ha-blue);
+          "
+          onkeypress="if(event.key === 'Enter') { event.preventDefault(); importUrl(); }"
+        />
+
+        <p
+          id="importFeedback"
+          class="text-sm mt-2 hidden"
+          style="color: #10b981"
+        ></p>
+        <p id="importError" class="text-sm mt-2 hidden text-red-600"></p>
+
+        <div class="flex justify-end gap-2 mt-6">
+          <button
+            onclick="hideImportDialog()"
+            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition duration-200"
+          >
+            Cancel
+          </button>
+          <button
+            onclick="importUrl()"
+            class="px-4 py-2 text-white rounded-md transition duration-200"
+            style="background-color: var(--ha-blue)"
+            onmouseover="this.style.backgroundColor='var(--ha-blue-dark)'"
+            onmouseout="this.style.backgroundColor='var(--ha-blue)'"
+          >
+            Import
+          </button>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -494,6 +600,247 @@
             document.getElementById("next").value = settings.next;
         } catch (e) {
           console.error("Error loading settings:", e);
+        }
+      }
+
+      // Load settings from URL parameters
+      function loadFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // Extract path from query parameter
+        if (urlParams.has("path")) {
+          document.getElementById("path").value = urlParams.get("path");
+        }
+
+        // Parse viewport (widthxheight)
+        const viewport = urlParams.get("viewport");
+        if (viewport) {
+          const [width, height] = viewport.split("x");
+          if (width) document.getElementById("width").value = width;
+          if (height) document.getElementById("height").value = height;
+        }
+
+        // Load other parameters
+        if (urlParams.has("format")) {
+          document.getElementById("format").value = urlParams.get("format");
+        }
+        if (urlParams.has("theme")) {
+          document.getElementById("theme").value = urlParams.get("theme");
+        }
+        if (urlParams.has("dark")) {
+          document.getElementById("dark").checked = true;
+        }
+        if (urlParams.has("zoom")) {
+          document.getElementById("zoom").value = urlParams.get("zoom");
+        }
+        if (urlParams.has("wait")) {
+          document.getElementById("wait").value = urlParams.get("wait");
+        }
+        if (urlParams.has("lang")) {
+          document.getElementById("lang").value = urlParams.get("lang");
+        }
+        if (urlParams.has("eink")) {
+          document.getElementById("eink").value = urlParams.get("eink");
+        }
+        if (urlParams.has("rotate")) {
+          document.getElementById("rotate").value = urlParams.get("rotate");
+        }
+        if (urlParams.has("invert")) {
+          document.getElementById("invert").checked = true;
+        }
+        if (urlParams.has("next")) {
+          document.getElementById("next").value = urlParams.get("next");
+        }
+      }
+
+      // Update browser URL to match current form settings
+      function updateBrowserUrl() {
+        const path = document.getElementById("path").value || "/";
+        const width = document.getElementById("width").value;
+        const height = document.getElementById("height").value;
+        const format = document.getElementById("format").value;
+        const theme = document.getElementById("theme").value;
+        const dark = document.getElementById("dark").checked;
+        const zoom = document.getElementById("zoom").value;
+        const wait = document.getElementById("wait").value;
+        const lang = document.getElementById("lang").value;
+        const eink = document.getElementById("eink").value;
+        const rotate = document.getElementById("rotate").value;
+        const invert = document.getElementById("invert").checked;
+        const next = document.getElementById("next").value;
+
+        // Build query parameters - include path as a query param
+        const params = new URLSearchParams();
+        params.append("path", path);
+        params.append("viewport", `${width}x${height}`);
+
+        if (format && format !== "png") {
+          params.append("format", format);
+        }
+        if (theme) {
+          params.append("theme", theme);
+        }
+        if (dark) {
+          params.append("dark", "");
+        }
+        if (zoom) {
+          params.append("zoom", zoom);
+        }
+        if (wait) {
+          params.append("wait", wait);
+        }
+        if (lang) {
+          params.append("lang", lang);
+        }
+        if (eink) {
+          params.append("eink", eink);
+        }
+        if (rotate) {
+          params.append("rotate", rotate);
+        }
+        if (invert) {
+          params.append("invert", "");
+        }
+        if (next) {
+          params.append("next", next);
+        }
+
+        // Keep UI at root path, all settings in query string
+        const newUrl = `${window.location.origin}/?${params.toString()}`;
+
+        // Update browser URL without reloading the page
+        window.history.replaceState({}, "", newUrl);
+      }
+
+      // Import URL Dialog Functions
+      function showImportDialog() {
+        const dialog = document.getElementById("importDialog");
+        const input = document.getElementById("importUrlInput");
+        const feedback = document.getElementById("importFeedback");
+        const error = document.getElementById("importError");
+
+        // Clear previous state
+        input.value = "";
+        feedback.classList.add("hidden");
+        error.classList.add("hidden");
+
+        // Show dialog
+        dialog.classList.remove("hidden");
+
+        // Focus input
+        setTimeout(() => input.focus(), 100);
+
+        // Add ESC key listener
+        document.addEventListener("keydown", handleDialogEscape);
+      }
+
+      function hideImportDialog() {
+        const dialog = document.getElementById("importDialog");
+        dialog.classList.add("hidden");
+
+        // Remove ESC key listener
+        document.removeEventListener("keydown", handleDialogEscape);
+      }
+
+      function handleDialogEscape(e) {
+        if (e.key === "Escape") {
+          hideImportDialog();
+        }
+      }
+
+      function importUrl() {
+        const input = document.getElementById("importUrlInput");
+        const feedback = document.getElementById("importFeedback");
+        const error = document.getElementById("importError");
+        const urlString = input.value.trim();
+
+        // Hide previous messages
+        feedback.classList.add("hidden");
+        error.classList.add("hidden");
+
+        if (!urlString) {
+          error.textContent = "Please enter a URL";
+          error.classList.remove("hidden");
+          return;
+        }
+
+        try {
+          // Parse the URL - handle both full URLs and relative paths
+          let url;
+          if (
+            urlString.startsWith("http://") ||
+            urlString.startsWith("https://")
+          ) {
+            url = new URL(urlString);
+          } else {
+            // Relative path, add dummy origin
+            url = new URL(urlString, "http://dummy");
+          }
+
+          const urlParams = url.searchParams;
+          const pathname = url.pathname;
+
+          // Extract path from pathname if it's not just "/"
+          if (pathname && pathname !== "/") {
+            document.getElementById("path").value = pathname;
+          }
+
+          // Parse viewport (widthxheight)
+          const viewport = urlParams.get("viewport");
+          if (viewport) {
+            const [width, height] = viewport.split("x");
+            if (width) document.getElementById("width").value = width;
+            if (height) document.getElementById("height").value = height;
+          }
+
+          // Load other parameters
+          if (urlParams.has("format")) {
+            document.getElementById("format").value = urlParams.get("format");
+          }
+          if (urlParams.has("theme")) {
+            document.getElementById("theme").value = urlParams.get("theme");
+          }
+          if (urlParams.has("dark")) {
+            document.getElementById("dark").checked = true;
+          } else {
+            document.getElementById("dark").checked = false;
+          }
+          if (urlParams.has("zoom")) {
+            document.getElementById("zoom").value = urlParams.get("zoom");
+          }
+          if (urlParams.has("wait")) {
+            document.getElementById("wait").value = urlParams.get("wait");
+          }
+          if (urlParams.has("lang")) {
+            document.getElementById("lang").value = urlParams.get("lang");
+          }
+          if (urlParams.has("eink")) {
+            document.getElementById("eink").value = urlParams.get("eink");
+          }
+          if (urlParams.has("rotate")) {
+            document.getElementById("rotate").value = urlParams.get("rotate");
+          }
+          if (urlParams.has("invert")) {
+            document.getElementById("invert").checked = true;
+          } else {
+            document.getElementById("invert").checked = false;
+          }
+          if (urlParams.has("next")) {
+            document.getElementById("next").value = urlParams.get("next");
+          }
+
+          // Update the UI
+          updateUrl();
+          updateBrowserUrl();
+          saveSettings();
+
+          // Close dialog and start preview immediately
+          hideImportDialog();
+          loadPreview();
+        } catch (e) {
+          console.error("Error importing URL:", e);
+          error.textContent = "Invalid URL format. Please check and try again.";
+          error.classList.remove("hidden");
         }
       }
 
@@ -720,20 +1067,37 @@
         .forEach((input) => {
           input.addEventListener("input", () => {
             updateUrl();
+            updateBrowserUrl();
             saveSettings();
           });
           input.addEventListener("change", () => {
             updateUrl();
+            updateBrowserUrl();
             saveSettings();
+          });
+        });
+
+      // Auto-preview when any checkbox or dropdown changes
+      document
+        .querySelectorAll("#screenshotForm input[type='checkbox'], #screenshotForm select")
+        .forEach((input) => {
+          input.addEventListener("change", () => {
+            loadPreview();
           });
         });
 
       // Load settings and initialize on page load
       window.addEventListener("load", () => {
-        loadSettings();
+        // Load from URL first (highest priority), then localStorage
+        loadFromUrl();
+        // Only load from localStorage if URL params are not present
+        if (!window.location.search) {
+          loadSettings();
+        }
         populateThemePicker();
         prefillLanguage();
         updateUrl();
+        updateBrowserUrl();
         loadPreview();
       });
     </script>

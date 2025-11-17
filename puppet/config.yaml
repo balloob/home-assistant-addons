@@ -1,6 +1,6 @@
 name: "Puppet"
 description: "Turn dashboards into nice pictures"
-version: "1.23.0"
+version: "2.0.0"
 slug: "puppet"
 homeassistant_api: true
 init: false
@@ -9,6 +9,7 @@ arch:
   - amd64
 ports:
   10000/tcp: 10000
+webui: "http://[HOST]:[PORT:10000]/"
 options:
   access_token: ""
   keep_browser_open: false

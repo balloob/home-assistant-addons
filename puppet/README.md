@@ -21,6 +21,20 @@ _This is a prototype, there is NO security. Anyone can access the server and mak
 - home_assistant_url: Base URL of your Home Assistant instance that the add-on browser should open when taking screenshots. Defaults to `http://homeassistant:8123` which is the internal URL at which the add-on can reach Home Assistant. You can override it if your instance has configured SSL certificates inside Home Assistant and requires to be reached via a different hostname or port (e.g., http://my-ha.local:8123 or https://example.duckdns.org).
 - keep_browser_open: If true, keeps the Chromium browser alive between requests.
 
+## Web UI
+
+The add-on now includes a web-based user interface to help you easily configure and preview screenshots. You can access it by:
+
+1. Opening the add-on's Web UI from the Home Assistant Supervisor interface
+2. Or navigating directly to `http://homeassistant.local:10000/`
+
+The Web UI provides:
+- Interactive form to configure screenshot parameters (path, viewport size, format, theme, etc.)
+- Live preview of screenshots
+- Automatically generated URL that you can copy and use in your automations or external applications
+
+This is particularly useful for testing different settings and finding the perfect configuration before using the URLs in your automations.
+
 ## Usage
 
 Starting the add-on will launch a new server on port 10000. Any path you request will return a screenshot of that page. You will need to specify the viewport size you want.

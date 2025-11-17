@@ -14,8 +14,8 @@ export const isAddOn = optionsFile === "/data/options.json";
 const options = JSON.parse(readFileSync(optionsFile));
 
 export const hassUrl = isAddOn
-  ? "http://homeassistant:8123"
-  : options.home_assistant_url;
+  ? (options.home_assistant_url || "http://homeassistant:8123")
+  : (options.home_assistant_url || "http://localhost:8123");
 export const hassToken = options.access_token;
 export const debug = false;
 
@@ -24,6 +24,5 @@ export const chromiumExecutable = isAddOn ? "/usr/bin/chromium" : (options.chrom
 export const keepBrowserOpen = options.keep_browser_open || false;
 
 if (!hassToken) {
-  console.error("No access token found. Please configure the access token");
-  process.exit(1);
+  console.warn("No access token configured. UI will show configuration instructions.");
 }

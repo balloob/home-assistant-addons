@@ -2,6 +2,7 @@ import http from "node:http";
 import { Browser } from "./screenshot.js";
 import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
+import { handleUIRequest } from "./ui.js";
 
 // Maximum number of next requests to keep in memory
 const MAX_NEXT_REQUESTS = 100;
@@ -61,9 +62,16 @@ class RequestHandler {
   }
 
   async handleRequest(request, response) {
-    if (request.url === "/favicon.ico") {
+    const requestUrl = new URL(request.url, "http://localhost");
+
+    if (requestUrl.pathname === "/favicon.ico") {
       response.statusCode = 404;
       response.end();
+      return;
+    }
+
+    if (requestUrl.pathname === "/") {
+      await handleUIRequest(response);
       return;
     }
 
@@ -81,11 +89,6 @@ class RequestHandler {
 
     try {
       console.debug(requestId, "Handling", request.url);
-      const requestUrl = new URL(
-        request.url,
-        // We don't use this, but we need full URL for parsing.
-        "http://localhost",
-      );
 
       let extraWait = parseInt(requestUrl.searchParams.get("wait"));
       if (isNaN(extraWait)) {
@@ -166,26 +169,25 @@ class RequestHandler {
         next = undefined;
       }
 
+      // We removed error handling on this block so the add-on crashes and watchdog recovers
       let image;
+      let navigateResult = null;
       try {
-        const navigateResult = await this.browser.navigatePage(requestParams);
-        console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
-        this.navigationTime = Math.max(
-          this.navigationTime,
-          navigateResult.time,
-        );
-        const screenshotResult = await this.browser.screenshotPage(
-          requestParams,
-        );
-        console.debug(requestId, `Screenshot in ${screenshotResult.time} ms`);
-        image = screenshotResult.image;
+        navigateResult = await this.browser.navigatePage(requestParams);
       } catch (err) {
-        console.error(requestId, "Error generating screenshot", err);
-        response.statusCode =
-          err instanceof CannotOpenPageError ? err.status : 500;
-        response.end();
-        return;
+        if (err instanceof CannotOpenPageError) {
+          console.error(requestId, `Cannot open page: ${err.message}`);
+          response.statusCode = 404;
+          response.end(`Cannot open page: ${err.message}`);
+          return;
+        }
+        throw err;
       }
+      console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
+      this.navigationTime = Math.max(this.navigationTime, navigateResult.time);
+      const screenshotResult = await this.browser.screenshotPage(requestParams);
+      console.debug(requestId, `Screenshot in ${screenshotResult.time} ms`);
+      image = screenshotResult.image;
 
       // If eink processing happened, the format could be png or bmp
       const responseFormat = format;
@@ -285,6 +287,4 @@ const now = new Date();
 const serverUrl = isAddOn
   ? `http://homeassistant.local:${port}`
   : `http://localhost:${port}`;
-console.log(
-  `[${now.toLocaleTimeString()}] Visit server at ${serverUrl}/lovelace/0?viewport=1000x1000`,
-);
+console.log(`[${now.toLocaleTimeString()}] Visit server at ${serverUrl}`);

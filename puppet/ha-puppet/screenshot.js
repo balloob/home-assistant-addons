@@ -110,56 +110,44 @@ export class Browser {
       return this.page;
     }
 
-    let browser;
-    let page;
+    console.log("Starting browser");
+    // We don't catch these errors on purpose, as we're
+    // not able to recover once the app fails to start.
+    const browser = await puppeteer.launch({
+      headless: "shell",
+      executablePath: chromiumExecutable,
+      args: puppeteerArgs,
+    });
+    const page = await browser.newPage();
 
-    try {
-      console.log("Starting browser");
-      browser = await puppeteer.launch({
-        headless: "shell",
-        executablePath: chromiumExecutable,
-        args: puppeteerArgs,
-      });
-      page = await browser.newPage();
-
-      // Route all log messages from browser to our add-on log
-      // https://pptr.dev/api/puppeteer.pageevents
-      page
-        .on("framenavigated", (frame) =>
-          // Why are we seeing so many frame navigated ??
-          console.log("Frame navigated", frame.url()),
-        )
-        .on("console", (message) =>
-          console.log(
-            `CONSOLE ${message
-              .type()
-              .substr(0, 3)
-              .toUpperCase()} ${message.text()}`,
-          ),
-        )
-        .on("error", (err) => console.error("ERROR", err))
-        .on("pageerror", ({ message }) => console.log("PAGE ERROR", message))
-        .on("requestfailed", (request) =>
-          console.log(
-            `REQUEST-FAILED ${request.failure().errorText} ${request.url()}`,
-          ),
-        );
-      if (debug)
-        page.on("response", (response) =>
-          console.log(
-            `RESPONSE ${response.status()} ${response.url()} (cache: ${response.fromCache()})`,
-          ),
-        );
-    } catch (err) {
-      console.error("Error starting browser", err);
-      if (page) {
-        await page.close();
-      }
-      if (browser) {
-        await browser.close();
-      }
-      throw new Error("Error starting browser");
-    }
+    // Route all log messages from browser to our add-on log
+    // https://pptr.dev/api/puppeteer.pageevents
+    page
+      .on("framenavigated", (frame) =>
+        // Why are we seeing so many frame navigated ??
+        console.log("Frame navigated", frame.url()),
+      )
+      .on("console", (message) =>
+        console.log(
+          `CONSOLE ${message
+            .type()
+            .substr(0, 3)
+            .toUpperCase()} ${message.text()}`,
+        ),
+      )
+      .on("error", (err) => console.error("ERROR", err))
+      .on("pageerror", ({ message }) => console.log("PAGE ERROR", message))
+      .on("requestfailed", (request) =>
+        console.log(
+          `REQUEST-FAILED ${request.failure().errorText} ${request.url()}`,
+        ),
+      );
+    if (debug)
+      page.on("response", (response) =>
+        console.log(
+          `RESPONSE ${response.status()} ${response.url()} (cache: ${response.fromCache()})`,
+        ),
+      );
 
     this.browser = browser;
     this.page = page;

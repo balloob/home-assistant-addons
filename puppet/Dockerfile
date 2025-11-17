@@ -22,6 +22,7 @@ ENV TZ=Etc/UTC
 RUN apt-get update && apt-get install -y \
     chromium \
     curl \
+    fonts-noto-cjk \
     && curl -fsSL https://deb.nodesource.com/setup_23.x -o nodesource_setup.sh \
     && bash nodesource_setup.sh \
     && apt-get install -y nodejs \

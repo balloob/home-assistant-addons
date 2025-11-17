@@ -1,10 +1,16 @@
 # Screenshot Home Assistant using Puppeteer
 
-Experiment to easily create screenshots of your dashboards using Puppeteer. Allowing you to put them on e-ink screens or any other screen that can display images.
+Easily create screenshots of your Home Assistant dashboards. Allowing you to put them on e-ink screens or any other screen that can display images.
 
 [![Open your Home Assistant instance and show the dashboard of an add-on.](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=0f1cc410_puppet&repository_url=https%3A%2F%2Fgithub.com%2Fballoob%2Fhome-assistant-addons)
 
+![UI Screenshot](example/ui.png)
+
+![UI Screenshot](example/device.jpg)
+
 You will need to create a long lived access token and add it as an add-on option.
+
+Enable the watch dog option to restart the add-on when the browser fails to launch (happens sometimes, still investigating).
 
 _This is a prototype, there is NO security. Anyone can access the server and make screenshots of any Home Assistant page._
 
@@ -12,9 +18,26 @@ _This is a prototype, there is NO security. Anyone can access the server and mak
 
 ## Configuration
 
-- home_assistant_url: Base URL of your Home Assistant instance that the add-on browser should open when taking screenshots. Defaults to http://homeassistant:8123 when running as an add-on. You can override it if your instance is reachable via a different hostname or port (e.g., http://my-ha.local:8123 or https://example.duckdns.org).
 - access_token: Long-lived access token used to authenticate against Home Assistant.
+
+## Advanced configuration
+
+- home_assistant_url: Base URL of your Home Assistant instance that the add-on browser should open when taking screenshots. Defaults to `http://homeassistant:8123` which is the internal URL at which the add-on can reach Home Assistant. You can override it if your instance has configured SSL certificates inside Home Assistant and requires to be reached via a different hostname or port (e.g., http://my-ha.local:8123 or https://example.duckdns.org).
 - keep_browser_open: If true, keeps the Chromium browser alive between requests.
+
+## Web UI
+
+The add-on now includes a web-based user interface to help you easily configure and preview screenshots. You can access it by:
+
+1. Opening the add-on's Web UI from the Home Assistant Supervisor interface
+2. Or navigating directly to `http://homeassistant.local:10000/`
+
+The Web UI provides:
+- Interactive form to configure screenshot parameters (path, viewport size, format, theme, etc.)
+- Live preview of screenshots
+- Automatically generated URL that you can copy and use in your automations or external applications
+
+This is particularly useful for testing different settings and finding the perfect configuration before using the URLs in your automations.
 
 ## Usage
 
@@ -78,10 +101,10 @@ It's recommended to use an e-ink theme like [Graphite](https://github.com/Tilman
 
 ### Set Theme
 
-You can set the theme of the Home Assistant interface for the screenshot by adding the `theme` query parameter. The value should be a theme name that Home Assistant supports (e.g., `default`, `my-custom-theme`).
+You can set the theme of the Home Assistant interface for the screenshot by adding the `theme` query parameter. The value should be a theme name that Home Assistant supports (e.g., `Graphite E-ink Light`).
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&theme=my-custom-theme
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&theme=Graphite%20E-ink%20Light
 ```
 
 ### Finish loading detection
@@ -126,7 +149,7 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&rotate=90
 
 ### Set Language
 
-You can set the language of the Home Assistant interface for the screenshot by adding the `lang` query parameter. The value should be a language code that Home Assistant supports (e.g., `en`, `nl`, `de`).
+You can set the language of the Home Assistant interface for the screenshot by adding the `lang` query parameter. The value should be a language code that Home Assistant supports (e.g., `en`, `nl`, `de`, `ko`, `ja`, `zh-Hans`, `zh-Hant`).
 
 ```
 http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&lang=nl
@@ -151,6 +174,10 @@ http://homeassistant.local:10000/lovelace/0?next=300
 ```
 
 Providing a `next` parameter will not affect the current request. It will only be used for the next request.
+
+## Proxmox
+
+If you're running Home Assistant OS in a virtual machine under Proxmox, make sure the host type of your virtual machine is set to `host`.
 
 ## Speed (or lack thereof)
 

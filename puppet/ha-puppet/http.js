@@ -1,13 +1,8 @@
 import http from "node:http";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import { Browser } from "./screenshot.js";
 import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { handleUIRequest } from "./ui.js";
 
 // Maximum number of next requests to keep in memory
 const MAX_NEXT_REQUESTS = 100;
@@ -74,22 +69,9 @@ class RequestHandler {
     }
 
     // Serve UI page for root path
-    if (request.url === "/" || request.url === "/ui") {
-      try {
-        const htmlPath = join(__dirname, "ui.html");
-        const html = await readFile(htmlPath, "utf-8");
-        response.writeHead(200, {
-          "Content-Type": "text/html",
-          "Content-Length": Buffer.byteLength(html),
-        });
-        response.end(html);
-        return;
-      } catch (err) {
-        console.error("Error serving UI:", err);
-        response.statusCode = 500;
-        response.end("Error loading UI");
-        return;
-      }
+    if (request.url === "/") {
+      await handleUIRequest(response);
+      return;
     }
 
     const requestId = ++this.requestCount;

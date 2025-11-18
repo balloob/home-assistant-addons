@@ -99,10 +99,22 @@ function applyErrorDiffusionDithering(data, width, height, rgbPalette, channels,
       const errorB = oldB - newB;
 
       // Only distribute error if there's significant quantization error
-      // This prevents artifacts in solid color areas (like white backgrounds)
+      // This prevents artifacts in solid color areas (like white backgrounds and borders)
       const totalError = Math.abs(errorR) + Math.abs(errorG) + Math.abs(errorB);
-      if (totalError < 3) {
-        // Skip error diffusion for near-perfect matches
+
+      // Skip error diffusion for near-perfect matches
+      if (totalError < 8) {
+        continue;
+      }
+
+      // Also skip error diffusion for near-white or near-black pixels
+      // This prevents artifacts in solid areas and borders
+      const isNearWhite = oldR > 245 && oldG > 245 && oldB > 245;
+      const isNearBlack = oldR < 10 && oldG < 10 && oldB < 10;
+      const quantizedIsWhite = newR > 245 && newG > 245 && newB > 245;
+      const quantizedIsBlack = newR < 10 && newG < 10 && newB < 10;
+
+      if ((isNearWhite && quantizedIsWhite) || (isNearBlack && quantizedIsBlack)) {
         continue;
       }
 

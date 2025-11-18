@@ -118,6 +118,18 @@ class RequestHandler {
         .map((color) => color.startsWith("#") ? color : `#${color}`)
         .filter((color) => /^#[0-9A-F]{6}$/i.test(color));
 
+      // Palette colours for quantization (pixels matched to these, then mapped to colors)
+      let paletteColors = (requestUrl.searchParams.get("palette_colors") || "")
+        .split(",")
+        .map((color) => color.trim())
+        .map((color) => color.startsWith("#") ? color : `#${color}`)
+        .filter((color) => /^#[0-9A-F]{6}$/i.test(color));
+
+      // Validate that colors and paletteColors have the same length if both are provided
+      if (colors.length > 0 && paletteColors.length > 0 && colors.length !== paletteColors.length) {
+        // Mismatch - clear paletteColors to ignore it
+        paletteColors = [];
+      }
 
       let zoom = parseFloat(requestUrl.searchParams.get("zoom"));
       if (isNaN(zoom) || zoom <= 0) {
@@ -140,9 +152,19 @@ class RequestHandler {
       const theme = requestUrl.searchParams.get("theme") || undefined;
       const dark = requestUrl.searchParams.has("dark");
 
-      // Dithering algorithm: floyd-steinberg, atkinson, none
+      // Dithering algorithm
       let dithering = requestUrl.searchParams.get("dithering") || "none";
-      if (!["floyd-steinberg", "atkinson", "none"].includes(dithering)) {
+      const validDitheringAlgorithms = [
+        "none",
+        "floyd-steinberg",
+        "atkinson",
+        "jarvis-judice-ninke",
+        "stucki",
+        "burkes",
+        "sierra",
+        "sierra-lite"
+      ];
+      if (!validDitheringAlgorithms.includes(dithering)) {
         dithering = "none";
       }
 
@@ -152,6 +174,7 @@ class RequestHandler {
         extraWait,
         einkColors,
         colors,
+        paletteColors,
         dithering,
         invert,
         zoom,

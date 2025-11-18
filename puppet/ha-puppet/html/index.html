@@ -314,7 +314,7 @@
                 <!-- Custom Color Palette -->
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1"
-                    >Custom Color Palette</label
+                    >Custom Color Palette (Output)</label
                   >
                   <input
                     type="text"
@@ -327,7 +327,27 @@
                     placeholder="e.g., FF0000,00FF00,0000FF"
                   />
                   <p class="text-xs text-gray-500 mt-1">
-                    Comma-separated hex colors (with or without #). Overrides E-ink Colors setting.
+                    Output colors: comma-separated hex values (with or without #). Overrides E-ink Colors setting.
+                  </p>
+                </div>
+
+                <!-- Palette Colors (Quantization) -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1"
+                    >Palette Colors (Quantization)</label
+                  >
+                  <input
+                    type="text"
+                    id="palette_colors"
+                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent font-mono text-sm"
+                    style="
+                      border-color: var(--ha-blue-light);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                    placeholder="e.g., 000000,808080,FFFFFF"
+                  />
+                  <p class="text-xs text-gray-500 mt-1">
+                    Colors for matching pixels (e.g., grayscale values). Must match the count of Output colors. Matched colors are then mapped to Output colors in order.
                   </p>
                 </div>
 
@@ -345,11 +365,16 @@
                     "
                   >
                     <option value="none">None</option>
-                    <option value="floyd-steinberg">Floyd-Steinberg</option>
-                    <option value="atkinson">Atkinson</option>
+                    <option value="floyd-steinberg">Floyd-Steinberg (Classic)</option>
+                    <option value="atkinson">Atkinson (Soft)</option>
+                    <option value="jarvis-judice-ninke">Jarvis-Judice-Ninke (High Quality)</option>
+                    <option value="stucki">Stucki (Detailed)</option>
+                    <option value="burkes">Burkes (Fast)</option>
+                    <option value="sierra">Sierra (Smooth)</option>
+                    <option value="sierra-lite">Sierra Lite (Simple)</option>
                   </select>
                   <p class="text-xs text-gray-500 mt-1">
-                    Apply dithering when reducing colors (e.g., for e-ink displays). Floyd-Steinberg provides sharper results, while Atkinson is softer.
+                    Apply dithering when reducing colors (e.g., for e-ink displays). Different algorithms offer trade-offs between speed, quality, and visual style.
                   </p>
                 </div>
 
@@ -600,6 +625,7 @@
           lang: document.getElementById("lang").value,
           eink: document.getElementById("eink").value,
           colors: document.getElementById("colors").value,
+          palette_colors: document.getElementById("palette_colors").value,
           dithering: document.getElementById("dithering").value,
           rotate: document.getElementById("rotate").value,
           invert: document.getElementById("invert").checked,
@@ -638,6 +664,8 @@
             document.getElementById("eink").value = settings.eink;
           if (settings.colors !== undefined)
             document.getElementById("colors").value = settings.colors;
+          if (settings.palette_colors !== undefined)
+            document.getElementById("palette_colors").value = settings.palette_colors;
           if (settings.dithering !== undefined)
             document.getElementById("dithering").value = settings.dithering;
           if (settings.rotate !== undefined)
@@ -693,6 +721,9 @@
         if (urlParams.has("colors")) {
           document.getElementById("colors").value = urlParams.get("colors");
         }
+        if (urlParams.has("palette_colors")) {
+          document.getElementById("palette_colors").value = urlParams.get("palette_colors");
+        }
         if (urlParams.has("dithering")) {
           document.getElementById("dithering").value = urlParams.get("dithering");
         }
@@ -720,6 +751,7 @@
         const lang = document.getElementById("lang").value;
         const eink = document.getElementById("eink").value;
         const colors = document.getElementById("colors").value;
+        const palette_colors = document.getElementById("palette_colors").value;
         const dithering = document.getElementById("dithering").value;
         const rotate = document.getElementById("rotate").value;
         const invert = document.getElementById("invert").checked;
@@ -753,6 +785,9 @@
         }
         if (colors) {
           params.append("colors", colors);
+        }
+        if (palette_colors) {
+          params.append("palette_colors", palette_colors);
         }
         if (dithering && dithering !== "none") {
           params.append("dithering", dithering);
@@ -882,6 +917,9 @@
           if (urlParams.has("colors")) {
             document.getElementById("colors").value = urlParams.get("colors");
           }
+          if (urlParams.has("palette_colors")) {
+            document.getElementById("palette_colors").value = urlParams.get("palette_colors");
+          }
           if (urlParams.has("dithering")) {
             document.getElementById("dithering").value = urlParams.get("dithering");
           }
@@ -939,6 +977,7 @@
         const lang = document.getElementById("lang").value;
         const eink = document.getElementById("eink").value;
         const colors = document.getElementById("colors").value;
+        const palette_colors = document.getElementById("palette_colors").value;
         const dithering = document.getElementById("dithering").value;
         const rotate = document.getElementById("rotate").value;
         const invert = document.getElementById("invert").checked;
@@ -978,6 +1017,10 @@
 
         if (colors) {
           params.append("colors", colors);
+        }
+
+        if (palette_colors) {
+          params.append("palette_colors", palette_colors);
         }
 
         if (dithering && dithering !== "none") {

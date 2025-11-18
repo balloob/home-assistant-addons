@@ -7,7 +7,7 @@ import { CannotOpenPageError } from "./error.js";
 const HEADER_HEIGHT = 56;
 
 // Dithering algorithms
-function applyDithering(data, width, height, palette, channels = 4, algorithm = "atkinson") {
+function applyDithering(data, width, height, palette, channels = 4, algorithm = "atkinson", paletteColors = null) {
   // Convert hex colors to RGB
   const rgbPalette = palette.map(hex => {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -16,12 +16,22 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
     return [r, g, b];
   });
 
-  // Function to find the closest color in the palette
-  function findClosestColor(r, g, b) {
-    let minDistance = Infinity;
-    let closestColor = rgbPalette[0];
+  // If paletteColors is provided, use it for matching (quantization palette)
+  const rgbQuantizationPalette = paletteColors ? paletteColors.map(hex => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+  }) : rgbPalette;
 
-    for (const color of rgbPalette) {
+  // Function to find the closest color in the quantization palette
+  // Returns the index (which maps to both quantization and output palette)
+  function findClosestColorIndex(r, g, b) {
+    let minDistance = Infinity;
+    let closestIndex = 0;
+
+    for (let i = 0; i < rgbQuantizationPalette.length; i++) {
+      const color = rgbQuantizationPalette[i];
       const distance = Math.sqrt(
         Math.pow(r - color[0], 2) +
         Math.pow(g - color[1], 2) +
@@ -30,11 +40,17 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
 
       if (distance < minDistance) {
         minDistance = distance;
-        closestColor = color;
+        closestIndex = i;
       }
     }
 
-    return closestColor;
+    return closestIndex;
+  }
+
+  // Function to find the closest color (returns the output color)
+  function findClosestColor(r, g, b) {
+    const index = findClosestColorIndex(r, g, b);
+    return rgbPalette[index];
   }
 
   if (algorithm === "none") {
@@ -115,6 +131,60 @@ function applyErrorDiffusionDithering(data, width, height, rgbPalette, channels,
         distribute(0, 1, 1/8, errorDampening);   // Bottom
         distribute(1, 1, 1/8, errorDampening);   // Bottom-right
         distribute(0, 2, 1/8, errorDampening);   // Bottom + 1
+      } else if (algorithm === "jarvis-judice-ninke") {
+        // Jarvis-Judice-Ninke (JJN) - high quality, more diffusion
+        distribute(1, 0, 7/48);   // Right
+        distribute(2, 0, 5/48);   // Right + 1
+        distribute(-2, 1, 3/48);  // Bottom-left-left
+        distribute(-1, 1, 5/48);  // Bottom-left
+        distribute(0, 1, 7/48);   // Bottom
+        distribute(1, 1, 5/48);   // Bottom-right
+        distribute(2, 1, 3/48);   // Bottom-right-right
+        distribute(-2, 2, 1/48);  // Bottom2-left-left
+        distribute(-1, 2, 3/48);  // Bottom2-left
+        distribute(0, 2, 5/48);   // Bottom2
+        distribute(1, 2, 3/48);   // Bottom2-right
+        distribute(2, 2, 1/48);   // Bottom2-right-right
+      } else if (algorithm === "stucki") {
+        // Stucki - similar to JJN but slightly different weights
+        distribute(1, 0, 8/42);   // Right
+        distribute(2, 0, 4/42);   // Right + 1
+        distribute(-2, 1, 2/42);  // Bottom-left-left
+        distribute(-1, 1, 4/42);  // Bottom-left
+        distribute(0, 1, 8/42);   // Bottom
+        distribute(1, 1, 4/42);   // Bottom-right
+        distribute(2, 1, 2/42);   // Bottom-right-right
+        distribute(-2, 2, 1/42);  // Bottom2-left-left
+        distribute(-1, 2, 2/42);  // Bottom2-left
+        distribute(0, 2, 4/42);   // Bottom2
+        distribute(1, 2, 2/42);   // Bottom2-right
+        distribute(2, 2, 1/42);   // Bottom2-right-right
+      } else if (algorithm === "burkes") {
+        // Burkes - faster, two-row dithering
+        distribute(1, 0, 8/32);   // Right
+        distribute(2, 0, 4/32);   // Right + 1
+        distribute(-2, 1, 2/32);  // Bottom-left-left
+        distribute(-1, 1, 4/32);  // Bottom-left
+        distribute(0, 1, 8/32);   // Bottom
+        distribute(1, 1, 4/32);   // Bottom-right
+        distribute(2, 1, 2/32);   // Bottom-right-right
+      } else if (algorithm === "sierra") {
+        // Sierra - three-row dithering
+        distribute(1, 0, 5/32);   // Right
+        distribute(2, 0, 3/32);   // Right + 1
+        distribute(-2, 1, 2/32);  // Bottom-left-left
+        distribute(-1, 1, 4/32);  // Bottom-left
+        distribute(0, 1, 5/32);   // Bottom
+        distribute(1, 1, 4/32);   // Bottom-right
+        distribute(2, 1, 2/32);   // Bottom-right-right
+        distribute(-1, 2, 2/32);  // Bottom2-left
+        distribute(0, 2, 3/32);   // Bottom2
+        distribute(1, 2, 2/32);   // Bottom2-right
+      } else if (algorithm === "sierra-lite") {
+        // Sierra Lite - simplified two-row version
+        distribute(1, 0, 2/4);    // Right
+        distribute(-1, 1, 1/4);   // Bottom-left
+        distribute(0, 1, 1/4);    // Bottom
       }
     }
   }
@@ -475,7 +545,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, einkColors, colors, dithering, invert, zoom, format, rotate }) {
+  async screenshotPage({ viewport, einkColors, colors, paletteColors, dithering, invert, zoom, format, rotate }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -516,7 +586,7 @@ export class Browser {
         });
 
         // Apply dithering with the specified colors and algorithm
-        const ditheredData = applyDithering(data, info.width, info.height, colors, info.channels, dithering);
+        const ditheredData = applyDithering(data, info.width, info.height, colors, info.channels, dithering, paletteColors);
 
         // Create new sharp instance from dithered data
         sharpInstance = sharp(ditheredData, {

@@ -629,7 +629,8 @@ export class Browser {
         sharpInstance = sharpInstance.webp();
         image = await sharpInstance.toBuffer();
       } else if (format === "bmp") {
-        sharpInstance = sharpInstance.raw();
+        // Ensure we have 3-channel RGB data for BMP (remove alpha if present)
+        sharpInstance = sharpInstance.toColorspace('srgb').removeAlpha().raw();
         const { data, info } = await sharpInstance.toBuffer({
           resolveWithObject: true,
         });

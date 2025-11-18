@@ -98,6 +98,14 @@ function applyErrorDiffusionDithering(data, width, height, rgbPalette, channels,
       const errorG = oldG - newG;
       const errorB = oldB - newB;
 
+      // Only distribute error if there's significant quantization error
+      // This prevents artifacts in solid color areas (like white backgrounds)
+      const totalError = Math.abs(errorR) + Math.abs(errorG) + Math.abs(errorB);
+      if (totalError < 3) {
+        // Skip error diffusion for near-perfect matches
+        continue;
+      }
+
       // Distribute error to neighboring pixels
       const distribute = (dx, dy, factor, dampening = 1.0) => {
         const newX = x + dx;
@@ -545,7 +553,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, einkColors, colors, paletteColors, dithering, invert, zoom, format, rotate }) {
+  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -557,12 +565,8 @@ export class Browser {
     try {
       const page = await this.getPage();
 
-      // If eink processing is requested, we need PNG input for sharp.
-      // Otherwise, use the requested format.
-      const screenshotType = einkColors || format == "bmp" ? "png" : format;
-
       let image = await page.screenshot({
-        type: screenshotType,
+        type: "png",
         clip: {
           x: 0,
           y: headerHeight,
@@ -598,58 +602,15 @@ export class Browser {
         });
       }
 
-      // Manually handle color conversion for 2 colors
-      if (einkColors === 2) {
-        sharpInstance = sharpInstance.threshold(220, {
-          greyscale: true,
+      // Apply invert if requested (after color processing)
+      if (invert) {
+        sharpInstance = sharpInstance.negate({
+          alpha: false,
         });
-        if (invert) {
-          sharpInstance = sharpInstance.negate({
-            alpha: false,
-          });
-        }
       }
 
-      // If eink processing was requested, output PNG with specified colors
-      if (einkColors) {
-        if (einkColors === 2) {
-          sharpInstance = sharpInstance.toColourspace("b-w");
-        }
-        if (format == "bmp") {
-          sharpInstance = sharpInstance.raw();
-
-          const { data, info } = await sharpInstance.toBuffer({
-            resolveWithObject: true,
-          });
-          let bitsPerPixel = 8;
-          if (einkColors === 2) {
-            bitsPerPixel = 1;
-          } else if (einkColors === 4) {
-            bitsPerPixel = 2;
-          } else if (einkColors === 16) {
-            bitsPerPixel = 4;
-          }
-          const bmpEncoder = new BMPEncoder(
-            info.width,
-            info.height,
-            bitsPerPixel,
-          );
-          image = bmpEncoder.encode(data);
-        } else if (format === "jpeg") {
-          sharpInstance = sharpInstance.jpeg();
-          image = await sharpInstance.toBuffer();
-        } else if (format === "webp") {
-          sharpInstance = sharpInstance.webp();
-          image = await sharpInstance.toBuffer();
-        } else {
-          sharpInstance = sharpInstance.png({
-            colours: einkColors,
-          });
-          image = await sharpInstance.toBuffer();
-        }
-      }
-      // Otherwise, output in the requested format
-      else if (format === "jpeg") {
+      // Output in the requested format
+      if (format === "jpeg") {
         sharpInstance = sharpInstance.jpeg();
         image = await sharpInstance.toBuffer();
       } else if (format === "webp") {

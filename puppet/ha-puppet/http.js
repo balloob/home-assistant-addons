@@ -131,6 +131,22 @@ class RequestHandler {
         paletteColors = [];
       }
 
+      // Handle eink parameter deprecation and mutual exclusivity with colors
+      if (einkColors !== undefined) {
+        console.warn('[DEPRECATED] The "eink" query parameter is deprecated. Please use "colors" instead. Example: colors=000000,FFFFFF for black and white.');
+
+        // Convert eink=2 to black and white colors for backward compatibility
+        if (einkColors === 2 && colors.length === 0) {
+          colors = ["#000000", "#FFFFFF"];
+          console.log('[eink migration] Converted eink=2 to colors=000000,FFFFFF');
+          einkColors = undefined;
+        } else if (colors.length > 0) {
+          // colors parameter takes precedence - ignore eink
+          console.warn('[eink ignored] Both "eink" and "colors" parameters provided. Using "colors" and ignoring "eink".');
+          einkColors = undefined;
+        }
+      }
+
       let zoom = parseFloat(requestUrl.searchParams.get("zoom"));
       if (isNaN(zoom) || zoom <= 0) {
         zoom = 1;
@@ -172,7 +188,6 @@ class RequestHandler {
         pagePath: requestUrl.pathname,
         viewport: { width: viewportParams[0], height: viewportParams[1] },
         extraWait,
-        einkColors,
         colors,
         paletteColors,
         dithering,

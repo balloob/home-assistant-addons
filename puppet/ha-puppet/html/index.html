@@ -293,24 +293,6 @@
                   </p>
                 </div>
 
-                <!-- E-ink Colors -->
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1"
-                    >E-ink Colors</label
-                  >
-                  <input
-                    type="number"
-                    id="eink"
-                    min="2"
-                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
-                    style="
-                      border-color: var(--ha-blue-light);
-                      --tw-ring-color: var(--ha-blue);
-                    "
-                    placeholder="e.g., 2, 4, 7"
-                  />
-                </div>
-
                 <!-- Custom Color Palette -->
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1"
@@ -623,7 +605,6 @@
           zoom: document.getElementById("zoom").value,
           wait: document.getElementById("wait").value,
           lang: document.getElementById("lang").value,
-          eink: document.getElementById("eink").value,
           colors: document.getElementById("colors").value,
           palette_colors: document.getElementById("palette_colors").value,
           dithering: document.getElementById("dithering").value,
@@ -660,8 +641,6 @@
             document.getElementById("wait").value = settings.wait;
           if (settings.lang !== undefined)
             document.getElementById("lang").value = settings.lang;
-          if (settings.eink !== undefined)
-            document.getElementById("eink").value = settings.eink;
           if (settings.colors !== undefined)
             document.getElementById("colors").value = settings.colors;
           if (settings.palette_colors !== undefined)
@@ -715,9 +694,6 @@
         if (urlParams.has("lang")) {
           document.getElementById("lang").value = urlParams.get("lang");
         }
-        if (urlParams.has("eink")) {
-          document.getElementById("eink").value = urlParams.get("eink");
-        }
         if (urlParams.has("colors")) {
           document.getElementById("colors").value = urlParams.get("colors");
         }
@@ -749,7 +725,6 @@
         const zoom = document.getElementById("zoom").value;
         const wait = document.getElementById("wait").value;
         const lang = document.getElementById("lang").value;
-        const eink = document.getElementById("eink").value;
         const colors = document.getElementById("colors").value;
         const palette_colors = document.getElementById("palette_colors").value;
         const dithering = document.getElementById("dithering").value;
@@ -779,9 +754,6 @@
         }
         if (lang) {
           params.append("lang", lang);
-        }
-        if (eink) {
-          params.append("eink", eink);
         }
         if (colors) {
           params.append("colors", colors);
@@ -911,12 +883,21 @@
           if (urlParams.has("lang")) {
             document.getElementById("lang").value = urlParams.get("lang");
           }
-          if (urlParams.has("eink")) {
-            document.getElementById("eink").value = urlParams.get("eink");
-          }
-          if (urlParams.has("colors")) {
+
+          // Handle deprecated eink parameter - convert to colors
+          if (urlParams.has("eink") && !urlParams.has("colors")) {
+            const einkValue = parseInt(urlParams.get("eink"));
+            if (einkValue === 2) {
+              // Convert eink=2 to black and white colors
+              document.getElementById("colors").value = "000000,FFFFFF";
+              console.log('[eink migration] Imported URL with eink=2, converted to colors=000000,FFFFFF');
+              feedback.textContent = "⚠ Imported URL contained deprecated 'eink' parameter. Automatically converted to 'colors' parameter.";
+              feedback.classList.remove("hidden");
+            }
+          } else if (urlParams.has("colors")) {
             document.getElementById("colors").value = urlParams.get("colors");
           }
+
           if (urlParams.has("palette_colors")) {
             document.getElementById("palette_colors").value = urlParams.get("palette_colors");
           }
@@ -975,7 +956,6 @@
         const zoom = document.getElementById("zoom").value;
         const wait = document.getElementById("wait").value;
         const lang = document.getElementById("lang").value;
-        const eink = document.getElementById("eink").value;
         const colors = document.getElementById("colors").value;
         const palette_colors = document.getElementById("palette_colors").value;
         const dithering = document.getElementById("dithering").value;
@@ -1009,10 +989,6 @@
 
         if (lang) {
           params.append("lang", lang);
-        }
-
-        if (eink) {
-          params.append("eink", eink);
         }
 
         if (colors) {

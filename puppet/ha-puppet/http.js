@@ -3,6 +3,7 @@ import { Browser } from "./screenshot.js";
 import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
 import { handleUIRequest } from "./ui.js";
+import { loadDevicesConfig, getDeviceConfig } from "./devices.js";
 
 // Maximum number of next requests to keep in memory
 const MAX_NEXT_REQUESTS = 100;
@@ -90,13 +91,37 @@ class RequestHandler {
     try {
       console.debug(requestId, "Handling", request.url);
 
+      // Load device configurations
+      const devicesData = loadDevicesConfig();
+
+      // Check for device parameter and apply device configuration
+      const deviceParam = requestUrl.searchParams.get("device");
+      let deviceConfig = null;
+      if (deviceParam) {
+        deviceConfig = getDeviceConfig(deviceParam, devicesData);
+        if (!deviceConfig) {
+          response.statusCode = 400;
+          response.end(`Unknown device: ${deviceParam}`);
+          return;
+        }
+      }
+
       let extraWait = parseInt(requestUrl.searchParams.get("wait"));
       if (isNaN(extraWait)) {
         extraWait = undefined;
       }
-      const viewportParams = (requestUrl.searchParams.get("viewport") || "")
-        .split("x")
-        .map((n) => parseInt(n));
+
+      // Get viewport - use device config as default if device is specified
+      let viewportParams;
+      const viewportQuery = requestUrl.searchParams.get("viewport");
+      if (viewportQuery) {
+        viewportParams = viewportQuery.split("x").map((n) => parseInt(n));
+      } else if (deviceConfig) {
+        viewportParams = [deviceConfig.width, deviceConfig.height];
+      } else {
+        viewportParams = [];
+      }
+
       if (
         viewportParams.length != 2 ||
         !viewportParams.every((x) => !isNaN(x))
@@ -112,14 +137,20 @@ class RequestHandler {
       }
 
       // Supported colours as hex: colors=FF0000,00FF00,0000FF,... or colors=#FF0000,#00FF00,#0000FF,...
-      let colors = (requestUrl.searchParams.get("colors") || "")
+      // Use device config as default if available
+      const colorsQuery = requestUrl.searchParams.get("colors");
+      const colorsString = colorsQuery !== null ? colorsQuery : (deviceConfig?.colors || "");
+      let colors = colorsString
         .split(",")
         .map((color) => color.trim())
         .map((color) => color.startsWith("#") ? color : `#${color}`)
         .filter((color) => /^#[0-9A-F]{6}$/i.test(color));
 
       // Palette colours for quantization (pixels matched to these, then mapped to colors)
-      let paletteColors = (requestUrl.searchParams.get("palette_colors") || "")
+      // Use device config as default if available
+      const paletteColorsQuery = requestUrl.searchParams.get("palette_colors");
+      const paletteColorsString = paletteColorsQuery !== null ? paletteColorsQuery : (deviceConfig?.palette_colors || "");
+      let paletteColors = paletteColorsString
         .split(",")
         .map((color) => color.trim())
         .map((color) => color.startsWith("#") ? color : `#${color}`)
@@ -169,7 +200,9 @@ class RequestHandler {
       const dark = requestUrl.searchParams.has("dark");
 
       // Dithering algorithm
-      let dithering = requestUrl.searchParams.get("dithering") || "none";
+      // Use device config as default if available
+      const ditheringQuery = requestUrl.searchParams.get("dithering");
+      let dithering = ditheringQuery !== null ? ditheringQuery : (deviceConfig?.dithering || "none");
       const validDitheringAlgorithms = [
         "none",
         "floyd-steinberg",

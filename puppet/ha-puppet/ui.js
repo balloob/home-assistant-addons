@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createConnection, createLongLivedTokenAuth } from "home-assistant-js-websocket";
 import { hassUrl, hassToken, isAddOn } from "./const.js";
+import { loadDevicesConfig } from "./devices.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -100,8 +101,9 @@ export async function handleUIRequest(response) {
     }
 
     // Normal UI flow with token
-    // Fetch Home Assistant data
+    // Fetch Home Assistant data and load device configurations
     const hassData = await fetchHomeAssistantData();
+    const devicesData = loadDevicesConfig();
 
     // Check if we failed to connect to Home Assistant
     if (!hassData.themes || !hassData.network || !hassData.config) {
@@ -148,9 +150,10 @@ export async function handleUIRequest(response) {
     const htmlPath = join(__dirname, "html", "index.html");
     let html = await readFile(htmlPath, "utf-8");
 
-    // Inject window.hass data into the HTML (pretty formatted)
-    const scriptTag = `<script>window.hass = ${JSON.stringify(hassData, null, 2)};</script>`;
-    html = html.replace("</head>", `${scriptTag}\n  </head>`);
+    // Inject window.hass and window.devices data into the HTML (pretty formatted)
+    const hassScriptTag = `<script>window.hass = ${JSON.stringify(hassData, null, 2)};</script>`;
+    const devicesScriptTag = `<script>window.devices = ${JSON.stringify(devicesData, null, 2)};</script>`;
+    html = html.replace("</head>", `${hassScriptTag}\n  ${devicesScriptTag}\n  </head>`);
 
     response.writeHead(200, {
       "Content-Type": "text/html",

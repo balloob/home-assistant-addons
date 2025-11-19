@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.4.0
+
+- Add device configuration support with `device` URL parameter and web UI selector
+- Devices stored in editable `devices.json` with alias support
+- Initial device: Spectra E6 7.3" display (alias: `seeed-reterminal-e1002`)
+
 ## 2.3.0
 
 - Add color dithering support with `colors` URL parameter for custom color palettes

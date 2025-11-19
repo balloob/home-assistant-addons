@@ -1323,21 +1323,24 @@
         });
 
       // Add event listener for device selector specifically to handle device changes
+      // Note: loadPreview() is called by the generic select change listener below
       document.getElementById("device").addEventListener("change", () => {
         onDeviceChange();
-        loadPreview();
       });
 
       // Load settings and initialize on page load
       window.addEventListener("load", () => {
+        // Populate pickers first so options are available when loading settings
+        populateDevicePicker();
+        populateThemePicker();
+
         // Load from URL first (highest priority), then localStorage
         loadFromUrl();
         // Only load from localStorage if URL params are not present
         if (!window.location.search) {
           loadSettings();
         }
-        populateDevicePicker();
-        populateThemePicker();
+
         prefillLanguage();
         updateUrl();
         updateBrowserUrl();

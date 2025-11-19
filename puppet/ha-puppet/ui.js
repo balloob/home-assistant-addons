@@ -3,24 +3,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createConnection, createLongLivedTokenAuth } from "home-assistant-js-websocket";
 import { hassUrl, hassToken, isAddOn } from "./const.js";
+import { loadDevicesConfig } from "./devices.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-/**
- * Load device configurations from devices.json
- * @returns {Promise<Object>} The devices configuration
- */
-async function loadDevicesConfig() {
-  try {
-    const devicesPath = join(__dirname, "devices.json");
-    const devicesData = await readFile(devicesPath, "utf-8");
-    return JSON.parse(devicesData);
-  } catch (err) {
-    console.error("Error loading devices config:", err);
-    return { devices: {}, aliases: {} };
-  }
-}
 
 /**
  * Fetch Home Assistant data via WebSocket and REST API
@@ -169,7 +155,7 @@ export async function handleUIRequest(response) {
     // Inject window.hass and window.devices data into the HTML (pretty formatted)
     const hassScriptTag = `<script>window.hass = ${JSON.stringify(hassData, null, 2)};</script>`;
     const devicesScriptTag = `<script>window.devices = ${JSON.stringify(devicesData, null, 2)};</script>`;
-    html = html.replace("</head>", `${hassScriptTag}\n    ${devicesScriptTag}\n  </head>`);
+    html = html.replace("</head>", `${hassScriptTag}\n  ${devicesScriptTag}\n  </head>`);
 
     response.writeHead(200, {
       "Content-Type": "text/html",

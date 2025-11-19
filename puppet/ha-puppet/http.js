@@ -1,39 +1,9 @@
 import http from "node:http";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import { Browser } from "./screenshot.js";
 import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
 import { handleUIRequest } from "./ui.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Load device configurations
-let devicesConfig = null;
-async function loadDevicesConfig() {
-  if (!devicesConfig) {
-    const devicesPath = join(__dirname, "devices.json");
-    const devicesData = await readFile(devicesPath, "utf-8");
-    devicesConfig = JSON.parse(devicesData);
-  }
-  return devicesConfig;
-}
-
-// Resolve device name (handle aliases)
-function resolveDeviceName(deviceName, config) {
-  if (config.aliases && config.aliases[deviceName]) {
-    return config.aliases[deviceName];
-  }
-  return deviceName;
-}
-
-// Get device configuration
-function getDeviceConfig(deviceName, config) {
-  const resolvedName = resolveDeviceName(deviceName, config);
-  return config.devices[resolvedName] || null;
-}
+import { loadDevicesConfig, getDeviceConfig } from "./devices.js";
 
 // Maximum number of next requests to keep in memory
 const MAX_NEXT_REQUESTS = 100;
@@ -122,7 +92,13 @@ class RequestHandler {
       console.debug(requestId, "Handling", request.url);
 
       // Load device configurations
-      const devicesData = await loadDevicesConfig();
+      let devicesData;
+      try {
+        devicesData = await loadDevicesConfig();
+      } catch (err) {
+        console.error(requestId, "Error loading device config", err);
+        devicesData = { devices: {}, aliases: {} };
+      }
 
       // Check for device parameter and apply device configuration
       const deviceParam = requestUrl.searchParams.get("device");

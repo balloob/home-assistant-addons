@@ -84,7 +84,7 @@
                 <option value="">Custom / Manual Configuration</option>
               </select>
               <p class="text-xs text-gray-500 mt-1">
-                Select a predefined device to automatically set viewport, colors, and dithering. You can still override individual settings.
+                Select a predefined device to automatically apply viewport, colors, and dithering settings. The generated URL will include the device parameter plus any manual overrides.
               </p>
             </div>
 
@@ -1003,10 +1003,45 @@
 
         // Build query parameters
         const params = new URLSearchParams();
-        params.append("viewport", `${width}x${height}`);
 
-        if (device) {
+        // When a device is selected, include device parameter
+        // Also include any manually overridden parameters
+        if (device && currentDeviceConfig) {
           params.append("device", device);
+
+          // Check for manual overrides by comparing with device config
+          const currentViewport = `${width}x${height}`;
+          const deviceViewport = `${currentDeviceConfig.width}x${currentDeviceConfig.height}`;
+          if (currentViewport !== deviceViewport) {
+            params.append("viewport", currentViewport);
+          }
+
+          if (colors && colors !== (currentDeviceConfig.colors || "")) {
+            params.append("colors", colors);
+          }
+
+          if (palette_colors && palette_colors !== (currentDeviceConfig.palette_colors || "")) {
+            params.append("palette_colors", palette_colors);
+          }
+
+          if (dithering && dithering !== (currentDeviceConfig.dithering || "none")) {
+            params.append("dithering", dithering);
+          }
+        } else {
+          // No device selected - include viewport and color parameters
+          params.append("viewport", `${width}x${height}`);
+
+          if (colors) {
+            params.append("colors", colors);
+          }
+
+          if (palette_colors) {
+            params.append("palette_colors", palette_colors);
+          }
+
+          if (dithering && dithering !== "none") {
+            params.append("dithering", dithering);
+          }
         }
 
         if (format && format !== "png") {
@@ -1031,18 +1066,6 @@
 
         if (lang) {
           params.append("lang", lang);
-        }
-
-        if (colors) {
-          params.append("colors", colors);
-        }
-
-        if (palette_colors) {
-          params.append("palette_colors", palette_colors);
-        }
-
-        if (dithering && dithering !== "none") {
-          params.append("dithering", dithering);
         }
 
         if (rotate) {
@@ -1209,11 +1232,40 @@
         });
       }
 
+      // Store the current device config for comparison
+      let currentDeviceConfig = null;
+
+      // Initialize currentDeviceConfig based on selected device
+      function initializeDeviceConfig() {
+        const deviceId = document.getElementById("device").value;
+
+        if (!deviceId || !window.devices?.devices) {
+          currentDeviceConfig = null;
+          return;
+        }
+
+        // Resolve alias to actual device
+        let actualDeviceId = deviceId;
+        if (window.devices.aliases && window.devices.aliases[deviceId]) {
+          actualDeviceId = window.devices.aliases[deviceId];
+        }
+
+        const device = window.devices.devices[actualDeviceId];
+        if (!device) {
+          currentDeviceConfig = null;
+          return;
+        }
+
+        // Store device config for URL building
+        currentDeviceConfig = device;
+      }
+
       // Handle device selection change
       function onDeviceChange() {
         const deviceId = document.getElementById("device").value;
 
         if (!deviceId || !window.devices?.devices) {
+          currentDeviceConfig = null;
           return; // No device selected or no devices available
         }
 
@@ -1226,8 +1278,12 @@
         const device = window.devices.devices[actualDeviceId];
         if (!device) {
           console.error(`Device not found: ${actualDeviceId}`);
+          currentDeviceConfig = null;
           return;
         }
+
+        // Store device config for URL building
+        currentDeviceConfig = device;
 
         // Apply device configuration to form fields
         if (device.width !== undefined) {
@@ -1340,6 +1396,9 @@
         if (!window.location.search) {
           loadSettings();
         }
+
+        // Initialize device config for URL building after loading settings
+        initializeDeviceConfig();
 
         prefillLanguage();
         updateUrl();

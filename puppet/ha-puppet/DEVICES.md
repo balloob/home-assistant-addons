@@ -13,7 +13,7 @@ The `devices.json` file contains two main sections:
 
 Device configurations are validated against `devices.schema.json`. The schema enforces:
 
-- Device IDs must use lowercase letters, numbers, and hyphens only
+- Device IDs must use lowercase letters, numbers, hyphens, and dots only
 - Required fields: `width` and `height`
 - Optional fields: `name`, `colors`, `palette_colors`, `dithering`
 - Viewport dimensions must be between 100-4000 pixels
@@ -55,7 +55,7 @@ Add a new entry to the `devices` object:
 
 ### 3. Device ID Guidelines
 
-- Use lowercase letters, numbers, and hyphens only
+- Use lowercase letters, numbers, hyphens, and dots only
 - Include manufacturer or model information
 - Be specific (e.g., `spectra-e6-7.3in` not just `spectra`)
 

@@ -9,7 +9,7 @@
       "type": "object",
       "description": "Device definitions with display settings",
       "patternProperties": {
-        "^[a-z0-9-]+$": {
+        "^[a-z0-9.-]+$": {
           "type": "object",
           "required": ["width", "height"],
           "properties": {
@@ -63,9 +63,9 @@
       "type": "object",
       "description": "Device aliases mapping to device IDs",
       "patternProperties": {
-        "^[a-z0-9-]+$": {
+        "^[a-z0-9.-]+$": {
           "type": "string",
-          "pattern": "^[a-z0-9-]+$",
+          "pattern": "^[a-z0-9.-]+$",
           "description": "Target device ID"
         }
       },

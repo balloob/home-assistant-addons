@@ -1,6 +1,6 @@
 {
   "devices": {
-    "spectra-e6-7.3in": {
+    "7.3in-spectra-e6": {
       "name": "Spectra E6 7.3\"",
       "width": 800,
       "height": 480,
@@ -10,6 +10,6 @@
     }
   },
   "aliases": {
-    "seeed-reterminal-e1002": "spectra-e6-7.3in"
+    "seeed-reterminal-e1002": "7.3in-spectra-e6"
   }
 }

@@ -6,6 +6,212 @@ import { CannotOpenPageError } from "./error.js";
 
 const HEADER_HEIGHT = 56;
 
+// Dithering algorithms
+function applyDithering(data, width, height, palette, channels = 4, algorithm = "atkinson", paletteColors = null) {
+  // Convert hex colors to RGB
+  const rgbPalette = palette.map(hex => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+  });
+
+  // If paletteColors is provided, use it for matching (quantization palette)
+  const rgbQuantizationPalette = paletteColors ? paletteColors.map(hex => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+  }) : rgbPalette;
+
+  // Function to find the closest color in the quantization palette
+  // Returns the index (which maps to both quantization and output palette)
+  function findClosestColorIndex(r, g, b) {
+    let minDistance = Infinity;
+    let closestIndex = 0;
+
+    for (let i = 0; i < rgbQuantizationPalette.length; i++) {
+      const color = rgbQuantizationPalette[i];
+      const distance = Math.sqrt(
+        Math.pow(r - color[0], 2) +
+        Math.pow(g - color[1], 2) +
+        Math.pow(b - color[2], 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = i;
+      }
+    }
+
+    return closestIndex;
+  }
+
+  // Function to find the closest color (returns the output color)
+  function findClosestColor(r, g, b) {
+    const index = findClosestColorIndex(r, g, b);
+    return rgbPalette[index];
+  }
+
+  if (algorithm === "none") {
+    // Simple nearest color mapping without dithering
+    const result = new Uint8Array(data);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * channels;
+        const [newR, newG, newB] = findClosestColor(result[idx], result[idx + 1], result[idx + 2]);
+        result[idx] = newR;
+        result[idx + 1] = newG;
+        result[idx + 2] = newB;
+      }
+    }
+    return result;
+  }
+
+  // Apply error diffusion dithering
+  return applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColor);
+}
+
+function applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColor) {
+  // Create a copy of the data to work with
+  const result = new Uint8Array(data);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * channels;
+
+      const oldR = result[idx];
+      const oldG = result[idx + 1];
+      const oldB = result[idx + 2];
+
+      const [newR, newG, newB] = findClosestColor(oldR, oldG, oldB);
+
+      result[idx] = newR;
+      result[idx + 1] = newG;
+      result[idx + 2] = newB;
+      // Keep alpha channel unchanged if it exists
+      if (channels === 4) {
+        // Alpha channel remains the same
+      }
+
+      const errorR = oldR - newR;
+      const errorG = oldG - newG;
+      const errorB = oldB - newB;
+
+      // Only distribute error if there's significant quantization error
+      // This prevents artifacts in solid color areas (like white backgrounds and borders)
+      const totalError = Math.abs(errorR) + Math.abs(errorG) + Math.abs(errorB);
+
+      // Skip error diffusion for near-perfect matches
+      if (totalError < 8) {
+        continue;
+      }
+
+      // Also skip error diffusion for near-white or near-black pixels
+      // This prevents artifacts in solid areas and borders
+      const isNearWhite = oldR > 245 && oldG > 245 && oldB > 245;
+      const isNearBlack = oldR < 10 && oldG < 10 && oldB < 10;
+      const quantizedIsWhite = newR > 245 && newG > 245 && newB > 245;
+      const quantizedIsBlack = newR < 10 && newG < 10 && newB < 10;
+
+      if ((isNearWhite && quantizedIsWhite) || (isNearBlack && quantizedIsBlack)) {
+        continue;
+      }
+
+      // Distribute error to neighboring pixels
+      const distribute = (dx, dy, factor, dampening = 1.0) => {
+        const newX = x + dx;
+        const newY = y + dy;
+
+        if (newX >= 0 && newX < width && newY >= 0 && newY < height) {
+          const newIdx = (newY * width + newX) * channels;
+          const dampedErrorR = errorR * dampening;
+          const dampedErrorG = errorG * dampening;
+          const dampedErrorB = errorB * dampening;
+          result[newIdx] = Math.max(0, Math.min(255, result[newIdx] + dampedErrorR * factor));
+          result[newIdx + 1] = Math.max(0, Math.min(255, result[newIdx + 1] + dampedErrorG * factor));
+          result[newIdx + 2] = Math.max(0, Math.min(255, result[newIdx + 2] + dampedErrorB * factor));
+          // Don't modify alpha channel
+        }
+      };
+
+      // Apply different error distribution patterns based on algorithm
+      if (algorithm === "floyd-steinberg") {
+        // Floyd-Steinberg error distribution (classic, sharper)
+        distribute(1, 0, 7/16);  // Right
+        distribute(-1, 1, 3/16); // Bottom-left
+        distribute(0, 1, 5/16);  // Bottom
+        distribute(1, 1, 1/16);  // Bottom-right
+      } else if (algorithm === "atkinson") {
+        // Atkinson dithering error distribution (softer)
+        const errorDampening = 0.75; // Reduce error intensity for softer dithering
+        distribute(1, 0, 1/8, errorDampening);   // Right
+        distribute(2, 0, 1/8, errorDampening);   // Right + 1
+        distribute(-1, 1, 1/8, errorDampening);  // Bottom-left
+        distribute(0, 1, 1/8, errorDampening);   // Bottom
+        distribute(1, 1, 1/8, errorDampening);   // Bottom-right
+        distribute(0, 2, 1/8, errorDampening);   // Bottom + 1
+      } else if (algorithm === "jarvis-judice-ninke") {
+        // Jarvis-Judice-Ninke (JJN) - high quality, more diffusion
+        distribute(1, 0, 7/48);   // Right
+        distribute(2, 0, 5/48);   // Right + 1
+        distribute(-2, 1, 3/48);  // Bottom-left-left
+        distribute(-1, 1, 5/48);  // Bottom-left
+        distribute(0, 1, 7/48);   // Bottom
+        distribute(1, 1, 5/48);   // Bottom-right
+        distribute(2, 1, 3/48);   // Bottom-right-right
+        distribute(-2, 2, 1/48);  // Bottom2-left-left
+        distribute(-1, 2, 3/48);  // Bottom2-left
+        distribute(0, 2, 5/48);   // Bottom2
+        distribute(1, 2, 3/48);   // Bottom2-right
+        distribute(2, 2, 1/48);   // Bottom2-right-right
+      } else if (algorithm === "stucki") {
+        // Stucki - similar to JJN but slightly different weights
+        distribute(1, 0, 8/42);   // Right
+        distribute(2, 0, 4/42);   // Right + 1
+        distribute(-2, 1, 2/42);  // Bottom-left-left
+        distribute(-1, 1, 4/42);  // Bottom-left
+        distribute(0, 1, 8/42);   // Bottom
+        distribute(1, 1, 4/42);   // Bottom-right
+        distribute(2, 1, 2/42);   // Bottom-right-right
+        distribute(-2, 2, 1/42);  // Bottom2-left-left
+        distribute(-1, 2, 2/42);  // Bottom2-left
+        distribute(0, 2, 4/42);   // Bottom2
+        distribute(1, 2, 2/42);   // Bottom2-right
+        distribute(2, 2, 1/42);   // Bottom2-right-right
+      } else if (algorithm === "burkes") {
+        // Burkes - faster, two-row dithering
+        distribute(1, 0, 8/32);   // Right
+        distribute(2, 0, 4/32);   // Right + 1
+        distribute(-2, 1, 2/32);  // Bottom-left-left
+        distribute(-1, 1, 4/32);  // Bottom-left
+        distribute(0, 1, 8/32);   // Bottom
+        distribute(1, 1, 4/32);   // Bottom-right
+        distribute(2, 1, 2/32);   // Bottom-right-right
+      } else if (algorithm === "sierra") {
+        // Sierra - three-row dithering
+        distribute(1, 0, 5/32);   // Right
+        distribute(2, 0, 3/32);   // Right + 1
+        distribute(-2, 1, 2/32);  // Bottom-left-left
+        distribute(-1, 1, 4/32);  // Bottom-left
+        distribute(0, 1, 5/32);   // Bottom
+        distribute(1, 1, 4/32);   // Bottom-right
+        distribute(2, 1, 2/32);   // Bottom-right-right
+        distribute(-1, 2, 2/32);  // Bottom2-left
+        distribute(0, 2, 3/32);   // Bottom2
+        distribute(1, 2, 2/32);   // Bottom2-right
+      } else if (algorithm === "sierra-lite") {
+        // Sierra Lite - simplified two-row version
+        distribute(1, 0, 2/4);    // Right
+        distribute(-1, 1, 1/4);   // Bottom-left
+        distribute(0, 1, 1/4);    // Bottom
+      }
+    }
+  }
+
+  return result;
+}
+
 // These are JSON stringified values
 const hassLocalStorageDefaults = {
   dockedSidebar: `"always_hidden"`,
@@ -359,7 +565,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, einkColors, invert, zoom, format, rotate }) {
+  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -371,12 +577,8 @@ export class Browser {
     try {
       const page = await this.getPage();
 
-      // If eink processing is requested, we need PNG input for sharp.
-      // Otherwise, use the requested format.
-      const screenshotType = einkColors || format == "bmp" ? "png" : format;
-
       let image = await page.screenshot({
-        type: screenshotType,
+        type: "png",
         clip: {
           x: 0,
           y: headerHeight,
@@ -391,65 +593,44 @@ export class Browser {
         sharpInstance = sharpInstance.rotate(rotate);
       }
 
-      // Manually handle color conversion for 2 colors
-      if (einkColors === 2) {
-        sharpInstance = sharpInstance.threshold(220, {
-          greyscale: true,
+      // Apply custom color dithering if colors parameter is provided
+      if (colors && colors.length > 0) {
+        // Convert to raw pixel data for custom dithering
+        sharpInstance = sharpInstance.ensureAlpha().raw();
+        const { data, info } = await sharpInstance.toBuffer({
+          resolveWithObject: true,
         });
-        if (invert) {
-          sharpInstance = sharpInstance.negate({
-            alpha: false,
-          });
-        }
+
+        // Apply dithering with the specified colors and algorithm
+        const ditheredData = applyDithering(data, info.width, info.height, colors, info.channels, dithering, paletteColors);
+
+        // Create new sharp instance from dithered data
+        sharpInstance = sharp(ditheredData, {
+          raw: {
+            width: info.width,
+            height: info.height,
+            channels: info.channels,
+          },
+        });
       }
 
-      // If eink processing was requested, output PNG with specified colors
-      if (einkColors) {
-        if (einkColors === 2) {
-          sharpInstance = sharpInstance.toColourspace("b-w");
-        }
-        if (format == "bmp") {
-          sharpInstance = sharpInstance.raw();
-
-          const { data, info } = await sharpInstance.toBuffer({
-            resolveWithObject: true,
-          });
-          let bitsPerPixel = 8;
-          if (einkColors === 2) {
-            bitsPerPixel = 1;
-          } else if (einkColors === 4) {
-            bitsPerPixel = 2;
-          } else if (einkColors === 16) {
-            bitsPerPixel = 4;
-          }
-          const bmpEncoder = new BMPEncoder(
-            info.width,
-            info.height,
-            bitsPerPixel,
-          );
-          image = bmpEncoder.encode(data);
-        } else if (format === "jpeg") {
-          sharpInstance = sharpInstance.jpeg();
-          image = await sharpInstance.toBuffer();
-        } else if (format === "webp") {
-          sharpInstance = sharpInstance.webp();
-          image = await sharpInstance.toBuffer();
-        } else {
-          sharpInstance = sharpInstance.png({
-            colours: einkColors,
-          });
-          image = await sharpInstance.toBuffer();
-        }
+      // Apply invert if requested (after color processing)
+      if (invert) {
+        sharpInstance = sharpInstance.negate({
+          alpha: false,
+        });
       }
-      // Otherwise, output in the requested format
-      else if (format === "jpeg") {
+
+      // Output in the requested format
+      if (format === "jpeg") {
         sharpInstance = sharpInstance.jpeg();
         image = await sharpInstance.toBuffer();
       } else if (format === "webp") {
         sharpInstance = sharpInstance.webp();
         image = await sharpInstance.toBuffer();
       } else if (format === "bmp") {
-        sharpInstance = sharpInstance.raw();
+        // Ensure we have 3-channel RGB data for BMP (remove alpha if present)
+        sharpInstance = sharpInstance.toColorspace('srgb').removeAlpha().raw();
         const { data, info } = await sharpInstance.toBuffer({
           resolveWithObject: true,
         });

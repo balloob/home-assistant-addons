@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.0
+
+- Add color dithering support with `colors` URL parameter for custom color palettes
+- Add `dithering` parameter with support for Floyd-Steinberg, Atkinson and more algorithms
+- Add `paletteColors` parameter to use predefined color palettes
+- Replaces the previous `eink` parameter approach for limiting colors on e-ink displays
+
 ## 2.2.0
 
 - Add URL parameter syncing: all form settings are now represented in the browser URL for easy sharing

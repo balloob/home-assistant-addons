@@ -92,13 +92,7 @@ class RequestHandler {
       console.debug(requestId, "Handling", request.url);
 
       // Load device configurations
-      let devicesData;
-      try {
-        devicesData = await loadDevicesConfig();
-      } catch (err) {
-        console.error(requestId, "Error loading device config", err);
-        devicesData = { devices: {}, aliases: {} };
-      }
+      const devicesData = loadDevicesConfig();
 
       // Check for device parameter and apply device configuration
       const deviceParam = requestUrl.searchParams.get("device");

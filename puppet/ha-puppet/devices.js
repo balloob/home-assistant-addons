@@ -1,32 +1,11 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Cache for device configurations
-let devicesConfig = null;
+import devicesConfig from "./devices.json" with { type: "json" };
 
 /**
- * Load device configurations from devices.json
- * @returns {Promise<Object>} The devices configuration
+ * Get device configurations
+ * @returns {Object} The devices configuration
  */
-export async function loadDevicesConfig() {
-  if (devicesConfig) {
-    return devicesConfig;
-  }
-
-  try {
-    const devicesPath = join(__dirname, "devices.json");
-    const devicesData = await readFile(devicesPath, "utf-8");
-    devicesConfig = JSON.parse(devicesData);
-    return devicesConfig;
-  } catch (err) {
-    console.error("Error loading devices config:", err);
-    devicesConfig = { devices: {}, aliases: {} };
-    return devicesConfig;
-  }
+export function loadDevicesConfig() {
+  return devicesConfig;
 }
 
 /**

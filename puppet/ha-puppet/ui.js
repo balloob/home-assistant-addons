@@ -101,11 +101,9 @@ export async function handleUIRequest(response) {
     }
 
     // Normal UI flow with token
-    // Fetch Home Assistant data and device configurations
-    const [hassData, devicesData] = await Promise.all([
-      fetchHomeAssistantData(),
-      loadDevicesConfig(),
-    ]);
+    // Fetch Home Assistant data and load device configurations
+    const hassData = await fetchHomeAssistantData();
+    const devicesData = loadDevicesConfig();
 
     // Check if we failed to connect to Home Assistant
     if (!hassData.themes || !hassData.network || !hassData.config) {

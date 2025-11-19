@@ -68,6 +68,26 @@
           </div>
 
           <form id="screenshotForm" class="space-y-4">
+            <!-- Device Selector -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Device (optional)</label
+              >
+              <select
+                id="device"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                style="
+                  border-color: var(--ha-blue-light);
+                  --tw-ring-color: var(--ha-blue);
+                "
+              >
+                <option value="">Custom / Manual Configuration</option>
+              </select>
+              <p class="text-xs text-gray-500 mt-1">
+                Select a predefined device to automatically set viewport, colors, and dithering. You can still override individual settings.
+              </p>
+            </div>
+
             <!-- Path -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1"
@@ -596,6 +616,7 @@
       // Save settings to localStorage
       function saveSettings() {
         const settings = {
+          device: document.getElementById("device").value,
           path: document.getElementById("path").value,
           width: document.getElementById("width").value,
           height: document.getElementById("height").value,
@@ -623,6 +644,8 @@
         try {
           const settings = JSON.parse(saved);
 
+          if (settings.device !== undefined)
+            document.getElementById("device").value = settings.device;
           if (settings.path !== undefined)
             document.getElementById("path").value = settings.path;
           if (settings.width !== undefined)
@@ -661,6 +684,11 @@
       // Load settings from URL parameters
       function loadFromUrl() {
         const urlParams = new URLSearchParams(window.location.search);
+
+        // Extract device from query parameter
+        if (urlParams.has("device")) {
+          document.getElementById("device").value = urlParams.get("device");
+        }
 
         // Extract path from query parameter
         if (urlParams.has("path")) {
@@ -716,6 +744,7 @@
 
       // Update browser URL to match current form settings
       function updateBrowserUrl() {
+        const device = document.getElementById("device").value;
         const path = document.getElementById("path").value || "/";
         const width = document.getElementById("width").value;
         const height = document.getElementById("height").value;
@@ -737,6 +766,9 @@
         params.append("path", path);
         params.append("viewport", `${width}x${height}`);
 
+        if (device) {
+          params.append("device", device);
+        }
         if (format && format !== "png") {
           params.append("format", format);
         }
@@ -849,6 +881,11 @@
           const urlParams = url.searchParams;
           const pathname = url.pathname;
 
+          // Extract device parameter
+          if (urlParams.has("device")) {
+            document.getElementById("device").value = urlParams.get("device");
+          }
+
           // Extract path from pathname if it's not just "/"
           if (pathname && pathname !== "/") {
             document.getElementById("path").value = pathname;
@@ -947,6 +984,7 @@
 
       // Build URL from form parameters
       function buildUrl() {
+        const device = document.getElementById("device").value;
         const path = document.getElementById("path").value || "/";
         const width = document.getElementById("width").value;
         const height = document.getElementById("height").value;
@@ -966,6 +1004,10 @@
         // Build query parameters
         const params = new URLSearchParams();
         params.append("viewport", `${width}x${height}`);
+
+        if (device) {
+          params.append("device", device);
+        }
 
         if (format && format !== "png") {
           params.append("format", format);
@@ -1115,6 +1157,101 @@
         }
       }
 
+      // Populate device picker with available devices
+      function populateDevicePicker() {
+        const deviceSelect = document.getElementById("device");
+
+        if (!window.devices?.devices) {
+          console.log("No devices configuration found");
+          return;
+        }
+
+        // Clear existing options except the first one (Custom)
+        deviceSelect.innerHTML = '<option value="">Custom / Manual Configuration</option>';
+
+        // Create a combined list of devices and aliases
+        const deviceOptions = [];
+
+        // Add all devices
+        Object.keys(window.devices.devices).forEach((deviceId) => {
+          const device = window.devices.devices[deviceId];
+          deviceOptions.push({
+            id: deviceId,
+            name: device.name || deviceId,
+            isAlias: false
+          });
+        });
+
+        // Add all aliases
+        if (window.devices.aliases) {
+          Object.keys(window.devices.aliases).forEach((aliasId) => {
+            const targetDevice = window.devices.aliases[aliasId];
+            const device = window.devices.devices[targetDevice];
+            if (device) {
+              deviceOptions.push({
+                id: aliasId,
+                name: `${aliasId} (${device.name || targetDevice})`,
+                isAlias: true
+              });
+            }
+          });
+        }
+
+        // Sort by name
+        deviceOptions.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Add device options
+        deviceOptions.forEach((option) => {
+          const optionElement = document.createElement("option");
+          optionElement.value = option.id;
+          optionElement.textContent = option.name;
+          deviceSelect.appendChild(optionElement);
+        });
+      }
+
+      // Handle device selection change
+      function onDeviceChange() {
+        const deviceId = document.getElementById("device").value;
+
+        if (!deviceId || !window.devices?.devices) {
+          return; // No device selected or no devices available
+        }
+
+        // Resolve alias to actual device
+        let actualDeviceId = deviceId;
+        if (window.devices.aliases && window.devices.aliases[deviceId]) {
+          actualDeviceId = window.devices.aliases[deviceId];
+        }
+
+        const device = window.devices.devices[actualDeviceId];
+        if (!device) {
+          console.error(`Device not found: ${actualDeviceId}`);
+          return;
+        }
+
+        // Apply device configuration to form fields
+        if (device.width !== undefined) {
+          document.getElementById("width").value = device.width;
+        }
+        if (device.height !== undefined) {
+          document.getElementById("height").value = device.height;
+        }
+        if (device.colors !== undefined) {
+          document.getElementById("colors").value = device.colors;
+        }
+        if (device.palette_colors !== undefined) {
+          document.getElementById("palette_colors").value = device.palette_colors;
+        }
+        if (device.dithering !== undefined) {
+          document.getElementById("dithering").value = device.dithering;
+        }
+
+        // Update URL and save settings
+        updateUrl();
+        updateBrowserUrl();
+        saveSettings();
+      }
+
       // Populate theme picker with available themes
       function populateThemePicker() {
         const themeSelect = document.getElementById("theme");
@@ -1185,6 +1322,12 @@
           });
         });
 
+      // Add event listener for device selector specifically to handle device changes
+      document.getElementById("device").addEventListener("change", () => {
+        onDeviceChange();
+        loadPreview();
+      });
+
       // Load settings and initialize on page load
       window.addEventListener("load", () => {
         // Load from URL first (highest priority), then localStorage
@@ -1193,6 +1336,7 @@
         if (!window.location.search) {
           loadSettings();
         }
+        populateDevicePicker();
         populateThemePicker();
         prefillLanguage();
         updateUrl();

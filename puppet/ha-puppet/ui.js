@@ -8,6 +8,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
+ * Load device configurations from devices.json
+ * @returns {Promise<Object>} The devices configuration
+ */
+async function loadDevicesConfig() {
+  try {
+    const devicesPath = join(__dirname, "devices.json");
+    const devicesData = await readFile(devicesPath, "utf-8");
+    return JSON.parse(devicesData);
+  } catch (err) {
+    console.error("Error loading devices config:", err);
+    return { devices: {}, aliases: {} };
+  }
+}
+
+/**
  * Fetch Home Assistant data via WebSocket and REST API
  * @returns {Promise<Object>} The Home Assistant data
  */
@@ -100,8 +115,11 @@ export async function handleUIRequest(response) {
     }
 
     // Normal UI flow with token
-    // Fetch Home Assistant data
-    const hassData = await fetchHomeAssistantData();
+    // Fetch Home Assistant data and device configurations
+    const [hassData, devicesData] = await Promise.all([
+      fetchHomeAssistantData(),
+      loadDevicesConfig(),
+    ]);
 
     // Check if we failed to connect to Home Assistant
     if (!hassData.themes || !hassData.network || !hassData.config) {
@@ -148,9 +166,10 @@ export async function handleUIRequest(response) {
     const htmlPath = join(__dirname, "html", "index.html");
     let html = await readFile(htmlPath, "utf-8");
 
-    // Inject window.hass data into the HTML (pretty formatted)
-    const scriptTag = `<script>window.hass = ${JSON.stringify(hassData, null, 2)};</script>`;
-    html = html.replace("</head>", `${scriptTag}\n  </head>`);
+    // Inject window.hass and window.devices data into the HTML (pretty formatted)
+    const hassScriptTag = `<script>window.hass = ${JSON.stringify(hassData, null, 2)};</script>`;
+    const devicesScriptTag = `<script>window.devices = ${JSON.stringify(devicesData, null, 2)};</script>`;
+    html = html.replace("</head>", `${hassScriptTag}\n    ${devicesScriptTag}\n  </head>`);
 
     response.writeHead(200, {
       "Content-Type": "text/html",

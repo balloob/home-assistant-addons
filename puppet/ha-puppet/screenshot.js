@@ -69,10 +69,10 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
   }
 
   // Apply error diffusion dithering
-  return applyErrorDiffusionDithering(data, width, height, rgbPalette, channels, algorithm, findClosestColor);
+  return applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColor);
 }
 
-function applyErrorDiffusionDithering(data, width, height, rgbPalette, channels, algorithm, findClosestColor) {
+function applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColor) {
   // Create a copy of the data to work with
   const result = new Uint8Array(data);
 

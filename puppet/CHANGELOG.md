@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0
+
+- Add color dithering support with `colors` URL parameter for custom color palettes
+- Add `dithering` parameter with support for Floyd-Steinberg and Atkinson algorithms
+- Add `paletteColors` parameter to use predefined color palettes
+
 ## 2.2.0
 
 - Add URL parameter syncing: all form settings are now represented in the browser URL for easy sharing

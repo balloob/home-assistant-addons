@@ -162,6 +162,11 @@ class RequestHandler {
         paletteColors = [];
       }
 
+      // If palette_colors is empty, use colors as the palette
+      if (paletteColors.length === 0 && colors.length > 0) {
+        paletteColors = colors;
+      }
+
       // Handle eink parameter deprecation and mutual exclusivity with colors
       if (einkColors !== undefined) {
         console.warn('[DEPRECATED] The "eink" query parameter is deprecated. Please use "colors" instead. Example: colors=000000,FFFFFF for black and white.');

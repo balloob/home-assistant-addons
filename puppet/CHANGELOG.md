@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.1
+
+- Fix empty `paletteColors` by falling back to use the colors specified in the `colors` parameter
+
 ## 2.4.0
 
 - Add device configuration support with `device` URL parameter and web UI selector

@@ -1021,7 +1021,11 @@
           }
 
           // Only add palette_colors if it's different from colors (backend defaults palette_colors to colors when empty)
-          if (palette_colors && palette_colors !== (currentDeviceConfig.palette_colors || "") && palette_colors !== colors) {
+          // Also skip if palette_colors equals device's colors when colors param is not being added
+          if (palette_colors && 
+              palette_colors !== (currentDeviceConfig.palette_colors || "") && 
+              palette_colors !== colors &&
+              (colors || palette_colors !== (currentDeviceConfig.colors || ""))) {
             params.append("palette_colors", palette_colors);
           }
 

@@ -51,16 +51,16 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000
 
 ### e-ink displays
 
-To reduce the color palette for e-ink displays, you can add the `eink` parameter. The value represents the number of colors (including black) to use. For example, for a 2-color e-ink display:
+To reduce the color palette for e-ink displays, you can add the `colors` parameter. The value is a comma-separated list of hex colors to use. For example, for a 2-color e-ink display (black and white):
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&eink=2
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&colors=000000,FFFFFF
 ```
 
-If you are using `eink=2`, you can also invert the colors by adding the `invert` parameter:
+You can also invert the colors by adding the `invert` parameter:
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&eink=2&invert
+http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&colors=000000,FFFFFF&invert
 ```
 
 It's recommended to use an e-ink theme like [Graphite](https://github.com/TilmanGriesel/graphite?tab=readme-ov-file#e-ink-themes) to optimize readability.
@@ -102,8 +102,6 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&format=webp
 ```
 http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&format=bmp
 ```
-
-**Note:** If the `eink` parameter is specified, the output format is limited to BMP and PNG.
 
 ### Rotate screenshot
 

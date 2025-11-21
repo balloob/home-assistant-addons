@@ -1020,7 +1020,8 @@
             params.append("colors", colors);
           }
 
-          if (palette_colors && palette_colors !== (currentDeviceConfig.palette_colors || "")) {
+          // Only add palette_colors if it's different from colors (backend defaults palette_colors to colors when empty)
+          if (palette_colors && palette_colors !== (currentDeviceConfig.palette_colors || "") && palette_colors !== colors) {
             params.append("palette_colors", palette_colors);
           }
 
@@ -1035,7 +1036,8 @@
             params.append("colors", colors);
           }
 
-          if (palette_colors) {
+          // Only add palette_colors if it's different from colors (backend defaults palette_colors to colors when empty)
+          if (palette_colors && palette_colors !== colors) {
             params.append("palette_colors", palette_colors);
           }
 

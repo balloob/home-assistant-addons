@@ -162,11 +162,6 @@ class RequestHandler {
         paletteColors = [];
       }
 
-      // If palette_colors is empty, use colors as the palette
-      if (paletteColors.length === 0 && colors.length > 0) {
-        paletteColors = colors;
-      }
-
       // Handle eink parameter deprecation and mutual exclusivity with colors
       if (einkColors !== undefined) {
         console.warn('[DEPRECATED] The "eink" query parameter is deprecated. Please use "colors" instead. Example: colors=000000,FFFFFF for black and white.');
@@ -181,6 +176,11 @@ class RequestHandler {
           console.warn('[eink ignored] Both "eink" and "colors" parameters provided. Using "colors" and ignoring "eink".');
           einkColors = undefined;
         }
+      }
+
+      // If palette_colors is empty, use colors as the palette
+      if (paletteColors.length === 0 && colors.length > 0) {
+        paletteColors = colors;
       }
 
       let zoom = parseFloat(requestUrl.searchParams.get("zoom"));

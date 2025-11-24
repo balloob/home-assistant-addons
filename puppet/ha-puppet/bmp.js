@@ -136,9 +136,12 @@ export class BMPEncoder {
       }
     } else if (this.bitsPerPixel === 24) {
       // 24-bit: true color RGB
-      for (let y = this.height - 1; y >= 0; y--) {
+      // BMP is bottom-up, so we write rows from bottom to top
+      for (let bmpRow = 0; bmpRow < this.height; bmpRow++) {
+        // Source row is flipped (top-down in input, bottom-up in BMP)
+        const sourceRow = this.height - 1 - bmpRow;
         for (let x = 0; x < this.width; x++) {
-          const sourceIndex = (y * this.width + x) * 3;
+          const sourceIndex = (sourceRow * this.width + x) * 3;
           const r = imageData[sourceIndex];
           const g = imageData[sourceIndex + 1];
           const b = imageData[sourceIndex + 2];

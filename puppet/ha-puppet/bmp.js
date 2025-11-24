@@ -23,7 +23,7 @@ export class BMPEncoder {
     }
 
     // Calculate row size in bytes (rounded up) and padding
-    const rowBytes = Math.ceil(this.width * this.bitsPerPixel / 8);
+    const rowBytes = Math.ceil((this.width * this.bitsPerPixel) / 8);
     const padding = (4 - (rowBytes % 4)) % 4;
     this.padding = padding;
     this.paddedWidthBytes = rowBytes + padding;
@@ -96,7 +96,7 @@ export class BMPEncoder {
         for (let x = 0; x < this.width; x++) {
           const sourceIndex = (y * this.width + x) * 3;
           const paletteIndex = this.findPaletteIndex(imageData[sourceIndex], imageData[sourceIndex + 1], imageData[sourceIndex + 2]);
-          const byteIndex = ((this.height - 1 - y) * this.paddedWidthBytes + Math.floor(x / 8));
+          const byteIndex = (this.height - 1 - y) * this.paddedWidthBytes + Math.floor(x / 8);
           const bitIndex = 7 - (x % 8);
           const currentByte = pixelData.readUInt8(byteIndex);
           pixelData.writeUInt8(currentByte | (paletteIndex << bitIndex), byteIndex);
@@ -157,6 +157,10 @@ export class BMPEncoder {
 
   // Parse a hex color string to RGB components
   parseHexColor(hexColor) {
+    // Validate hex color format
+    if (!hexColor || typeof hexColor !== 'string' || !hexColor.match(/^#[0-9A-Fa-f]{6}$/)) {
+      throw new Error(`Invalid hex color format: ${hexColor}. Expected format: #RRGGBB`);
+    }
     const r = parseInt(hexColor.slice(1, 3), 16);
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);

@@ -634,7 +634,30 @@ export class Browser {
         const { data, info } = await sharpInstance.toBuffer({
           resolveWithObject: true,
         });
-        const bmpEncoder = new BMPEncoder(info.width, info.height, 24);
+        
+        // Determine bits per pixel based on color palette
+        let bitsPerPixel = 24;
+        let palette = null;
+        
+        if (colors && colors.length > 0) {
+          // Use indexed color mode when a palette is specified
+          if (colors.length <= 2) {
+            bitsPerPixel = 1;
+            palette = colors;
+          } else if (colors.length <= 4) {
+            bitsPerPixel = 2;
+            palette = colors;
+          } else if (colors.length <= 16) {
+            bitsPerPixel = 4;
+            palette = colors;
+          } else {
+            // More than 16 colors: use 24-bit true color
+            bitsPerPixel = 24;
+            palette = null;
+          }
+        }
+        
+        const bmpEncoder = new BMPEncoder(info.width, info.height, bitsPerPixel, palette);
         image = bmpEncoder.encode(data);
       } else {
         sharpInstance = sharpInstance.png();

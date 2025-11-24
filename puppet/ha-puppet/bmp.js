@@ -22,12 +22,11 @@ export class BMPEncoder {
       }
     }
 
-    let padding = (this.width * (this.bitsPerPixel / 8)) % 4;
-    if (padding > 0) {
-      padding = 4 - padding;
-    }
+    // Calculate row size in bytes (rounded up) and padding
+    const rowBytes = Math.ceil(this.width * this.bitsPerPixel / 8);
+    const padding = (4 - (rowBytes % 4)) % 4;
     this.padding = padding;
-    this.paddedWidthBytes = Math.ceil(this.width * (this.bitsPerPixel / 8)) + padding;
+    this.paddedWidthBytes = rowBytes + padding;
   };
 
   encode(data) {

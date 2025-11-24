@@ -35,6 +35,9 @@ WORKDIR /app
 # Copy package.json and package-lock.json first
 COPY ha-puppet/package*.json ./
 
+# Skip Puppeteer's Chrome download since we use system Chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # Ensure a clean state before installing
 RUN npm ci --unsafe-perm
 

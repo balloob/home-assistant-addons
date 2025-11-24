@@ -1,6 +1,6 @@
 name: "Puppet"
 description: "Turn dashboards into nice pictures"
-version: "2.4.2"
+version: "2.4.3"
 slug: "puppet"
 homeassistant_api: true
 init: false

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.4.3
+
+- Skip downloading Chrome during build since system Chromium is used, reducing addon backup size by over 2GB
+
 ## 2.4.2
 
 - Fix colors when using deprecated eink parameter without paletteColors

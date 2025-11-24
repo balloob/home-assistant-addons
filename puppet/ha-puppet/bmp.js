@@ -23,8 +23,9 @@ export class BMPEncoder {
     }
 
     // Calculate row size in bytes (rounded up) and padding
+    // BMP rows must be aligned to 4-byte boundaries
     const rowBytes = Math.ceil((this.width * this.bitsPerPixel) / 8);
-    const padding = (4 - (rowBytes % 4)) % 4;
+    const padding = (4 - (rowBytes % 4)) % 4; // Padding needed to reach 4-byte alignment
     this.padding = padding;
     this.paddedWidthBytes = rowBytes + padding;
   };
@@ -86,46 +87,50 @@ export class BMPEncoder {
   };
 
   // Handles bitsPerPixel 1, 2, 4, 24
+  // Note: imageData is expected to be RGB format (3 bytes per pixel)
 
   createPixelData(imageData) {
     const pixelData = Buffer.alloc(this.height * this.paddedWidthBytes);
 
     if (this.bitsPerPixel === 1) {
       // 1-bit: monochrome (2 colors)
+      // Pack 8 pixels per byte, MSB first
       for (let y = 0; y < this.height; y++) {
         for (let x = 0; x < this.width; x++) {
           const sourceIndex = (y * this.width + x) * 3;
           const paletteIndex = this.findPaletteIndex(imageData[sourceIndex], imageData[sourceIndex + 1], imageData[sourceIndex + 2]);
           const byteIndex = (this.height - 1 - y) * this.paddedWidthBytes + Math.floor(x / 8);
-          const bitIndex = 7 - (x % 8);
+          const bitIndex = 7 - (x % 8); // MSB first: leftmost pixel is bit 7
           const currentByte = pixelData.readUInt8(byteIndex);
           pixelData.writeUInt8(currentByte | (paletteIndex << bitIndex), byteIndex);
         }
       }
     } else if (this.bitsPerPixel === 2) {
       // 2-bit: 4 colors, 4 pixels per byte
+      // Pack pixels from left to right, MSB first (bits 7-6, 5-4, 3-2, 1-0)
       for (let y = 0; y < this.height; y++) {
         let byteOffset = (this.height - 1 - y) * this.paddedWidthBytes;
         for (let x = 0; x < this.width; x++) {
           const sourceIndex = (y * this.width + x) * 3;
           const paletteIndex = this.findPaletteIndex(imageData[sourceIndex], imageData[sourceIndex + 1], imageData[sourceIndex + 2]);
-          const pixelInByte = x % 4;
+          const pixelInByte = x % 4; // 0=leftmost, 3=rightmost
           const byteIndex = byteOffset + Math.floor(x / 4);
-          const bitShift = (3 - pixelInByte) * 2; // 6, 4, 2, 0
+          const bitShift = (3 - pixelInByte) * 2; // 6, 4, 2, 0 (MSB first)
           const currentByte = pixelData.readUInt8(byteIndex);
           pixelData.writeUInt8(currentByte | (paletteIndex << bitShift), byteIndex);
         }
       }
     } else if (this.bitsPerPixel === 4) {
       // 4-bit: 16 colors, 2 pixels per byte
+      // Pack pixels from left to right, MSB first (bits 7-4, 3-0)
       for (let y = 0; y < this.height; y++) {
         let byteOffset = (this.height - 1 - y) * this.paddedWidthBytes;
         for (let x = 0; x < this.width; x++) {
           const sourceIndex = (y * this.width + x) * 3;
           const paletteIndex = this.findPaletteIndex(imageData[sourceIndex], imageData[sourceIndex + 1], imageData[sourceIndex + 2]);
-          const pixelInByte = x % 2;
+          const pixelInByte = x % 2; // 0=left, 1=right
           const byteIndex = byteOffset + Math.floor(x / 2);
-          const bitShift = (1 - pixelInByte) * 4; // 4 or 0
+          const bitShift = (1 - pixelInByte) * 4; // 4 or 0 (MSB first)
           const currentByte = pixelData.readUInt8(byteIndex);
           pixelData.writeUInt8(currentByte | (paletteIndex << bitShift), byteIndex);
         }

@@ -68,10 +68,7 @@ export class BMPEncoder {
       for (let i = 0; i < numColors; i++) {
         if (i < this.palette.length) {
           // Parse hex color
-          const color = this.palette[i];
-          const r = parseInt(color.slice(1, 3), 16);
-          const g = parseInt(color.slice(3, 5), 16);
-          const b = parseInt(color.slice(5, 7), 16);
+          const { r, g, b } = this.parseHexColor(this.palette[i]);
           // BMP palette is in BGRA order
           header.writeUInt8(b, paletteOffset++);
           header.writeUInt8(g, paletteOffset++);
@@ -91,7 +88,6 @@ export class BMPEncoder {
   // Handles bitsPerPixel 1, 2, 4, 24
 
   createPixelData(imageData) {
-    let offset = 0;
     const pixelData = Buffer.alloc(this.height * this.paddedWidthBytes);
 
     if (this.bitsPerPixel === 1) {
@@ -137,6 +133,7 @@ export class BMPEncoder {
     } else if (this.bitsPerPixel === 24) {
       // 24-bit: true color RGB
       // BMP is bottom-up, so we write rows from bottom to top
+      let offset = 0;
       for (let bmpRow = 0; bmpRow < this.height; bmpRow++) {
         // Source row is flipped (top-down in input, bottom-up in BMP)
         const sourceRow = this.height - 1 - bmpRow;
@@ -158,6 +155,14 @@ export class BMPEncoder {
     return pixelData;
   }
 
+  // Parse a hex color string to RGB components
+  parseHexColor(hexColor) {
+    const r = parseInt(hexColor.slice(1, 3), 16);
+    const g = parseInt(hexColor.slice(3, 5), 16);
+    const b = parseInt(hexColor.slice(5, 7), 16);
+    return { r, g, b };
+  }
+
   // Find the closest palette index for an RGB color
   findPaletteIndex(r, g, b) {
     if (!this.palette || this.palette.length === 0) {
@@ -168,16 +173,10 @@ export class BMPEncoder {
     let closestIndex = 0;
 
     for (let i = 0; i < this.palette.length; i++) {
-      const color = this.palette[i];
-      const pr = parseInt(color.slice(1, 3), 16);
-      const pg = parseInt(color.slice(3, 5), 16);
-      const pb = parseInt(color.slice(5, 7), 16);
+      const { r: pr, g: pg, b: pb } = this.parseHexColor(this.palette[i]);
       
-      const distance = Math.sqrt(
-        Math.pow(r - pr, 2) +
-        Math.pow(g - pg, 2) +
-        Math.pow(b - pb, 2)
-      );
+      // Use squared Euclidean distance (no need for sqrt when comparing)
+      const distance = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2;
 
       if (distance < minDistance) {
         minDistance = distance;

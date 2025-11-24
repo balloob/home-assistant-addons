@@ -46,7 +46,7 @@ Starting the add-on will launch a new server on port 10000. Any path you request
 For example, to get a 1000px x 1000px screenshot of your default dashboard, fetch:
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000
+http://homeassistant.local:10000/home?viewport=1000x1000
 ```
 
 ### e-ink displays
@@ -54,13 +54,13 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000
 To reduce the color palette for e-ink displays, you can add the `colors` parameter. The value is a comma-separated list of hex colors to use. For example, for a 2-color e-ink display (black and white):
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&colors=000000,FFFFFF
+http://homeassistant.local:10000/home?viewport=1000x1000&colors=000000,FFFFFF
 ```
 
 You can also invert the colors by adding the `invert` parameter:
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&colors=000000,FFFFFF&invert
+http://homeassistant.local:10000/home?viewport=1000x1000&colors=000000,FFFFFF&invert
 ```
 
 It's recommended to use an e-ink theme like [Graphite](https://github.com/TilmanGriesel/graphite?tab=readme-ov-file#e-ink-themes) to optimize readability.
@@ -70,7 +70,7 @@ It's recommended to use an e-ink theme like [Graphite](https://github.com/Tilman
 You can set the theme of the Home Assistant interface for the screenshot by adding the `theme` query parameter. The value should be a theme name that Home Assistant supports (e.g., `Graphite E-ink Light`).
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&theme=Graphite%20E-ink%20Light
+http://homeassistant.local:10000/home?viewport=1000x1000&theme=Graphite%20E-ink%20Light
 ```
 
 ### Finish loading detection
@@ -78,13 +78,13 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&theme=Graphite%20
 By default, on a cold start the server will wait for 2.5 extra seconds after the loading is considered done, to give things that are not tracked by loading spinners to load (ie icons, pictures). When the browser is active, it waits 750ms. You can control this wait time by adding a `wait` query parameter. For example, to wait 10 seconds:
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&wait=10000
+http://homeassistant.local:10000/home?viewport=1000x1000&wait=10000
 ```
 
 You can control the zoom level of the page using the `zoom` query parameter. The default zoom level is 1. For example, to zoom in 1.3x:
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&zoom=1.3
+http://homeassistant.local:10000/home?viewport=1000x1000&zoom=1.3
 ```
 
 ### Output formats
@@ -92,15 +92,15 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&zoom=1.3
 By default, the output format is PNG. You can request a JPEG, WebP or BMP image by adding the `format=jpeg`, `format=webp`, `format=bmp` query parameter:
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&format=jpeg
+http://homeassistant.local:10000/home?viewport=1000x1000&format=jpeg
 ```
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&format=webp
+http://homeassistant.local:10000/home?viewport=1000x1000&format=webp
 ```
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&format=bmp
+http://homeassistant.local:10000/home?viewport=1000x1000&format=bmp
 ```
 
 ### Rotate screenshot
@@ -108,7 +108,7 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&format=bmp
 You can rotate the screenshot by adding the `rotate` query parameter. Valid values are 90, 180, and 270.
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&rotate=90
+http://homeassistant.local:10000/home?viewport=1000x1000&rotate=90
 ```
 
 ### Set Language
@@ -116,7 +116,7 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&rotate=90
 You can set the language of the Home Assistant interface for the screenshot by adding the `lang` query parameter. The value should be a language code that Home Assistant supports (e.g., `en`, `nl`, `de`, `ko`, `ja`, `zh-Hans`, `zh-Hant`).
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&lang=nl
+http://homeassistant.local:10000/home?viewport=1000x1000&lang=nl
 ```
 
 ### Set Dark Mode
@@ -124,7 +124,7 @@ http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&lang=nl
 You can enable dark mode for the screenshot by adding the `dark` query parameter. This parameter doesn't require a value.
 
 ```
-http://homeassistant.local:10000/lovelace/0?viewport=1000x1000&dark
+http://homeassistant.local:10000/home?viewport=1000x1000&dark
 ```
 
 ### Preloading requests
@@ -134,7 +134,7 @@ To improve performance for subsequent requests, you can schedule the browser to 
 ```
 # Example how the browser will warm up so it's ready to take a screenshot
 # in 300 seconds.
-http://homeassistant.local:10000/lovelace/0?next=300
+http://homeassistant.local:10000/home?next=300
 ```
 
 Providing a `next` parameter will not affect the current request. It will only be used for the next request.

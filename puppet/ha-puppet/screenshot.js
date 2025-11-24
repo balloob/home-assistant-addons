@@ -270,7 +270,7 @@ export class Browser {
 
     // The last path we requested a screenshot for
     // We store this instead of using page.url() because panels can redirect
-    // users, ie / -> /lovelace/0.
+    // users, ie / -> /home.
     this.lastRequestedPath = undefined;
     this.lastRequestedLang = undefined;
     this.lastRequestedTheme = undefined;

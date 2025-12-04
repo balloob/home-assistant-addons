@@ -265,7 +265,7 @@ Returns screenshot of Home Assistant page
 
 **Example:**
 ```
-GET /lovelace/0?viewport=1000x600&format=png&theme=midnight&dark&zoom=1.2
+GET /home?viewport=1000x600&format=png&theme=midnight&dark&zoom=1.2
 ```
 
 ## Error Handling

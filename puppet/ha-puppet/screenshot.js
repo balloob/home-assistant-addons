@@ -565,7 +565,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate, bmpMode = "color" }) {
+  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -629,32 +629,13 @@ export class Browser {
         sharpInstance = sharpInstance.webp();
         image = await sharpInstance.toBuffer();
       } else if (format === "bmp") {
-        // Support multiple BMP modes: color (24-bit), grayscale (8-bit), binary (1-bit)
-        if (bmpMode === "grayscale") {
-          // Generate 8-bit grayscale
-          sharpInstance = sharpInstance.greyscale().removeAlpha().raw();
-          const { data, info } = await sharpInstance.toBuffer({
-            resolveWithObject: true,
-          });
-          const bmpEncoder = new BMPEncoder(info.width, info.height, 8);
-          image = bmpEncoder.encode(data);
-        } else if (bmpMode === "binary") {
-          // Generate 1-bit black/white using threshold
-          sharpInstance = sharpInstance.greyscale().threshold().raw();
-          const { data, info } = await sharpInstance.toBuffer({
-            resolveWithObject: true,
-          });
-          const bmpEncoder = new BMPEncoder(info.width, info.height, 1);
-          image = bmpEncoder.encode(data);
-        } else {
-          // Default: 24-bit color BMP
-          sharpInstance = sharpInstance.toColorspace('srgb').removeAlpha().raw();
-          const { data, info } = await sharpInstance.toBuffer({
-            resolveWithObject: true,
-          });
-          const bmpEncoder = new BMPEncoder(info.width, info.height, 24);
-          image = bmpEncoder.encode(data);
-        }
+        // Ensure we have 3-channel RGB data for BMP (remove alpha if present)
+        sharpInstance = sharpInstance.toColorspace('srgb').removeAlpha().raw();
+        const { data, info } = await sharpInstance.toBuffer({
+          resolveWithObject: true,
+        });
+        const bmpEncoder = new BMPEncoder(info.width, info.height, 24);
+        image = bmpEncoder.encode(data);
       } else {
         sharpInstance = sharpInstance.png();
         image = await sharpInstance.toBuffer();

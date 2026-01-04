@@ -195,12 +195,6 @@ class RequestHandler {
         format = "png";
       }
 
-      // BMP mode: 'color' (24-bit), 'grayscale' (8-bit), 'binary' (1-bit)
-      let bmpMode = requestUrl.searchParams.get("bmp_mode") || "color";
-      if (!["color", "grayscale", "binary"].includes(bmpMode)) {
-        bmpMode = "color";
-      }
-
       let rotate = parseInt(requestUrl.searchParams.get("rotate"));
       if (isNaN(rotate) || ![90, 180, 270].includes(rotate)) {
         rotate = undefined;
@@ -238,7 +232,6 @@ class RequestHandler {
         invert,
         zoom,
         format,
-        bmpMode,
         rotate,
         lang,
         theme,

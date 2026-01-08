@@ -24,7 +24,19 @@ export class BMPEncoder {
   };
 
   createHeader() {
-    const headerSize = this.bitsPerPixel === 1 ? 62 : (this.bitsPerPixel === 8 ? 1078 : 54);
+    let headerSize;
+    let colorsInPalette = 0;
+    if (this.bitsPerPixel === 1) {
+      headerSize = 62;
+      colorsInPalette = 2;
+    } else if (this.bitsPerPixel === 8) {
+      headerSize = 1078;
+      colorsInPalette = 256;
+    } else {
+      headerSize = 54;
+      colorsInPalette = 0;
+    }
+
     const fileSize = headerSize + this.height * this.paddedWidthBytes;
     const header = Buffer.alloc(headerSize);
     header.write("BM", 0, 2, "ascii");
@@ -41,8 +53,8 @@ export class BMPEncoder {
     header.writeInt32LE(0, 38); // Horizontal resolution (pixels per meter)
     header.writeInt32LE(0, 42); // Vertical resolution (pixels per meter)
     // Number of colors in palette (2 for 1bpp, 256 for 8bpp)
-    header.writeUInt32LE(this.bitsPerPixel === 1 ? 2 : (this.bitsPerPixel === 8 ? 256 : 0), 46);
-    header.writeUInt32LE(this.bitsPerPixel === 1 ? 2 : (this.bitsPerPixel === 8 ? 256 : 0), 50);
+    header.writeUInt32LE(colorsInPalette, 46);
+    header.writeUInt32LE(colorsInPalette, 50);
 
     // Write color palette for indexed formats
     if (this.bitsPerPixel === 1) {

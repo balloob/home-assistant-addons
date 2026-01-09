@@ -17,14 +17,16 @@ Be aware these instructions are step by step, but you may want to first read all
 
 Ensure you have a docker host and can run a command like
 
-    docker run --rm -v options-dev.json:/app/options-dev.json ghcr.io/hiranchaudhuri/home-assistant-addons:cicd
+    docker run --rm -p 10000:10000 -v ./options-dev.json:/app/options-dev.json ghcr.io/hiranchaudhuri/home-assistant-addons:cicd
+
+You should see a prompt on the console saying "Visit server at http://localhost:10000". Do so and you should see the above image.
 
 For this to succeed you will have to create the options file named options-dev.json. It shall have the following content:
 
     {
       "home_assistant_url": "http://localhost:8123",
-      "access_token": "",
-      "chromium_executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "access_token": "<token>",
+      "chromium_executable": "/usr/bin/chromium",
       "keep_browser_open": false
     }
 

@@ -10,6 +10,9 @@ if (!optionsFile) {
   );
   process.exit(1);
 }
+
+console.log("Parsing options file %s...", optionsFile);
+
 export const isAddOn = optionsFile === "/data/options.json";
 const options = JSON.parse(readFileSync(optionsFile));
 

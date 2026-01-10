@@ -1,4 +1,4 @@
-const supportedBitsPerPixel = [1, 24];
+const supportedBitsPerPixel = [1, 8, 24];
 
 export class BMPEncoder {
   constructor(width, height, bitsPerPixel) {
@@ -24,7 +24,19 @@ export class BMPEncoder {
   };
 
   createHeader() {
-    const headerSize = this.bitsPerPixel === 1 ? 62 : 54;
+    let headerSize;
+    let colorsInPalette = 0;
+    if (this.bitsPerPixel === 1) {
+      headerSize = 62;
+      colorsInPalette = 2;
+    } else if (this.bitsPerPixel === 8) {
+      headerSize = 1078;
+      colorsInPalette = 256;
+    } else {
+      headerSize = 54;
+      colorsInPalette = 0;
+    }
+
     const fileSize = headerSize + this.height * this.paddedWidthBytes;
     const header = Buffer.alloc(headerSize);
     header.write("BM", 0, 2, "ascii");
@@ -37,14 +49,34 @@ export class BMPEncoder {
     header.writeUInt16LE(1, 26); // Number of color planes
     header.writeUInt16LE(this.bitsPerPixel, 28); // Bits per pixel
     header.writeUInt32LE(0, 30); // Compression (none)
-    header.writeUInt32LE(this.width * this.height * (this.bitsPerPixel / 8), 34); // Image size
+    header.writeUInt32LE(this.height * this.paddedWidthBytes, 34); // Image size (with padding)
     header.writeInt32LE(0, 38); // Horizontal resolution (pixels per meter)
     header.writeInt32LE(0, 42); // Vertical resolution (pixels per meter)
-    header.writeUInt32LE(this.bitsPerPixel === 1 ? 2 : 0, 46); // Number of colors in color palette
-    header.writeUInt32LE(this.bitsPerPixel === 1 ? 2 : 0, 50); // Important colors
+    // Number of colors in palette (2 for 1bpp, 256 for 8bpp)
+    header.writeUInt32LE(colorsInPalette, 46);
+    header.writeUInt32LE(colorsInPalette, 50);
+
+    // Write color palette for indexed formats
     if (this.bitsPerPixel === 1) {
-      header.writeUInt32LE(0x00000000, 54); // Color palette 0 - black
-      header.writeUInt32LE(0x00FFFFFF, 58); // Color palette 1 - white
+      // two entries: black and white (B,G,R,0)
+      header.writeUInt8(0x00, 54); // blue
+      header.writeUInt8(0x00, 55); // green
+      header.writeUInt8(0x00, 56); // red
+      header.writeUInt8(0x00, 57); // reserved
+      header.writeUInt8(0xFF, 58); // blue
+      header.writeUInt8(0xFF, 59); // green
+      header.writeUInt8(0xFF, 60); // red
+      header.writeUInt8(0x00, 61); // reserved
+    } else if (this.bitsPerPixel === 8) {
+      // 256 grayscale palette entries starting at offset 54, each 4 bytes (B,G,R,0)
+      const paletteBase = 54;
+      for (let i = 0; i < 256; i++) {
+        const off = paletteBase + i * 4;
+        header.writeUInt8(i, off + 0); // blue
+        header.writeUInt8(i, off + 1); // green
+        header.writeUInt8(i, off + 2); // red
+        header.writeUInt8(0x00, off + 3); // reserved
+      }
     }
     return header;
   };
@@ -83,6 +115,19 @@ export class BMPEncoder {
           pixelData.writeUInt8(b, offset++);
           pixelData.writeUInt8(g, offset++);
           pixelData.writeUInt8(r, offset++);
+        }
+        for (let p = 0; p < this.padding; p++) {
+          pixelData.writeUInt8(0, offset++);
+        }
+      }
+    }
+
+    else if (this.bitsPerPixel === 8) {
+      for (let y = this.height - 1; y >= 0; y--) {
+        for (let x = 0; x < this.width; x++) {
+          const pixel = imageData[y * this.width + x];
+          // Expect single-channel grayscale (0-255)
+          pixelData.writeUInt8(pixel, offset++);
         }
         for (let p = 0; p < this.padding; p++) {
           pixelData.writeUInt8(0, offset++);

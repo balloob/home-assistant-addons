@@ -290,6 +290,28 @@
                   </select>
                 </div>
 
+                <!-- BMP Mode -->
+                <div id="bmpModeContainer" style="display:none;">
+                  <label class="block text-sm font-medium text-gray-700 mb-1"
+                    >BMP Mode</label
+                  >
+                  <select
+                    id="bmp_mode"
+                    class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent"
+                    style="
+                      border-color: var(--ha-blue-light);
+                      --tw-ring-color: var(--ha-blue);
+                    "
+                  >
+                    <option value="color">Color (24-bit)</option>
+                    <option value="grayscale">Grayscale (8-bit)</option>
+                    <option value="binary">Binary (1-bit)</option>
+                  </select>
+                  <p class="text-xs text-gray-500 mt-1">
+                    Choose BMP output mode. Only applies when format is BMP.
+                  </p>
+                </div>
+
                 <!-- Wait Time -->
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1"
@@ -632,6 +654,7 @@
           rotate: document.getElementById("rotate").value,
           invert: document.getElementById("invert").checked,
           next: document.getElementById("next").value,
+          bmp_mode: document.getElementById("bmp_mode")?.value,
         };
         localStorage.setItem("puppetSettings", JSON.stringify(settings));
       }
@@ -676,6 +699,8 @@
             document.getElementById("invert").checked = settings.invert;
           if (settings.next !== undefined)
             document.getElementById("next").value = settings.next;
+          if (settings.bmp_mode !== undefined && document.getElementById("bmp_mode"))
+            document.getElementById("bmp_mode").value = settings.bmp_mode;
         } catch (e) {
           console.error("Error loading settings:", e);
         }
@@ -740,6 +765,9 @@
         if (urlParams.has("next")) {
           document.getElementById("next").value = urlParams.get("next");
         }
+        if (urlParams.has("bmp_mode") && document.getElementById("bmp_mode")) {
+          document.getElementById("bmp_mode").value = urlParams.get("bmp_mode");
+        }
       }
 
       // Update browser URL to match current form settings
@@ -760,6 +788,7 @@
         const rotate = document.getElementById("rotate").value;
         const invert = document.getElementById("invert").checked;
         const next = document.getElementById("next").value;
+        const bmp_mode = document.getElementById("bmp_mode")?.value || "color";
 
         // Build query parameters - include path as a query param
         const params = new URLSearchParams();
@@ -804,6 +833,11 @@
         }
         if (next) {
           params.append("next", next);
+        }
+
+        // Include bmp_mode only for BMP format (omit if default)
+        if (format === "bmp" && bmp_mode && bmp_mode !== "color") {
+          params.append("bmp_mode", bmp_mode);
         }
 
         // Keep UI at root path, all settings in query string
@@ -953,6 +987,11 @@
             document.getElementById("next").value = urlParams.get("next");
           }
 
+          if (urlParams.has("bmp_mode")) {
+            const el = document.getElementById("bmp_mode");
+            if (el) el.value = urlParams.get("bmp_mode");
+          }
+
           // Update the UI
           updateUrl();
           updateBrowserUrl();
@@ -1000,6 +1039,7 @@
         const rotate = document.getElementById("rotate").value;
         const invert = document.getElementById("invert").checked;
         const next = document.getElementById("next").value;
+        const bmp_mode = document.getElementById("bmp_mode")?.value || "color";
 
         // Build query parameters
         const params = new URLSearchParams();
@@ -1080,6 +1120,10 @@
           params.append("next", next);
         }
 
+        if (format === "bmp" && bmp_mode && bmp_mode !== "color") {
+          params.append("bmp_mode", bmp_mode);
+        }
+
         // Construct full URL with port 10000
         let baseUrl;
         if (window.hass?.network?.internal) {
@@ -1104,6 +1148,14 @@
       function updateUrl() {
         const url = buildUrl();
         document.getElementById("generatedUrl").value = url;
+        // Show or hide BMP mode control based on format
+        const fmt = document.getElementById("format").value;
+        const bmpContainer = document.getElementById("bmpModeContainer");
+        if (fmt === "bmp") {
+          bmpContainer.style.display = "block";
+        } else {
+          bmpContainer.style.display = "none";
+        }
       }
 
       // Copy URL to clipboard

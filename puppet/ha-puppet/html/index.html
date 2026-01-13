@@ -1060,7 +1060,16 @@
             params.append("colors", colors);
           }
 
-          if (palette_colors && palette_colors !== (currentDeviceConfig.palette_colors || "")) {
+          // Only add palette_colors if all conditions are met:
+          // 1. palette_colors is set
+          // 2. palette_colors differs from device's palette_colors config
+          // 3. palette_colors differs from colors param (backend defaults palette_colors to colors)
+          // 4. Either colors param is being added OR palette_colors differs from device's colors
+          //    (if colors matches device and is omitted, don't add palette_colors if it also matches device colors)
+          if (palette_colors && 
+              palette_colors !== (currentDeviceConfig.palette_colors || "") && 
+              palette_colors !== colors &&
+              (colors || palette_colors !== (currentDeviceConfig.colors || ""))) {
             params.append("palette_colors", palette_colors);
           }
 
@@ -1075,7 +1084,8 @@
             params.append("colors", colors);
           }
 
-          if (palette_colors) {
+          // Only add palette_colors if it's different from colors (backend defaults palette_colors to colors when empty)
+          if (palette_colors && palette_colors !== colors) {
             params.append("palette_colors", palette_colors);
           }
 

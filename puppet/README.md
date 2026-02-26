@@ -139,6 +139,17 @@ http://homeassistant.local:10000/home?next=300
 
 Providing a `next` parameter will not affect the current request. It will only be used for the next request.
 
+## Using images inside Home Assistant
+
+You can use a template image entity to pull Puppet output into Home Assistant to make it possible to send it in notifications or use for other purposes.
+
+```
+template:
+  - image:
+      name: My dashboard
+      url: "http://homeassistant.local:10000/home?viewport=1000x1000"
+```
+
 ## Proxmox
 
 If you're running Home Assistant OS in a virtual machine under Proxmox, make sure the host type of your virtual machine is set to `host`.

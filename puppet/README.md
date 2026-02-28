@@ -14,6 +14,12 @@ Enable the watch dog option to restart the add-on when the browser fails to laun
 
 _This is a prototype, there is NO security. Anyone can access the server and make screenshots of any Home Assistant page._
 
+## Important Note About Theme Changes
+
+**Starting with Home Assistant 2026.2.0**, theme settings are stored per user rather than per device/session. This means that when Puppet sets a theme for taking screenshots (e.g., an e-ink theme), **it will affect all sessions of the user whose access token is used by the addon**.
+
+**Recommended Workaround:** Create a separate user account specifically for Puppet and use that user's long-lived access token in the addon configuration. This way, theme changes for screenshots won't affect your normal browsing sessions.
+
 [![ESPHome device showing a screenshot of a Home Assistant dashboard](https://raw.githubusercontent.com/balloob/home-assistant-addons/main/puppet/example/screenshot.jpg)](./example/)
 
 ## Configuration
@@ -72,6 +78,8 @@ You can set the theme of the Home Assistant interface for the screenshot by addi
 ```
 http://homeassistant.local:10000/home?viewport=1000x1000&theme=Graphite%20E-ink%20Light
 ```
+
+**Note:** In Home Assistant 2026.2.0+, theme changes apply to all sessions of the user whose token is used. See the [Important Note About Theme Changes](#important-note-about-theme-changes) section above for the recommended workaround.
 
 ### Finish loading detection
 

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenDisplay Wi-Fi</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5; color: #333; padding: 24px; max-width: 960px; margin: 0 auto;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 24px; }
+    .subtitle a { color: #4a90d9; text-decoration: none; }
+    .subtitle a:hover { text-decoration: underline; }
+    h2 { font-size: 1.1rem; margin-bottom: 12px; color: #555; }
+    .card {
+      background: #fff; border-radius: 8px; padding: 20px;
+      margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .empty { color: #999; font-style: italic; padding: 12px 0; }
+    .screen {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 12px 0; border-bottom: 1px solid #eee;
+    }
+    .screen:last-child { border-bottom: none; }
+    .screen-info { flex: 1; }
+    .screen-info strong { font-size: 1rem; }
+    .screen-meta { color: #888; font-size: 0.85rem; margin-top: 4px; }
+    .screen-assignment { color: #4a90d9; font-size: 0.85rem; margin-top: 4px; }
+    .screen-actions { display: flex; gap: 8px; align-items: flex-start; margin-left: 12px; }
+    button {
+      background: #4a90d9; color: #fff; border: none; border-radius: 6px;
+      padding: 8px 16px; cursor: pointer; font-size: 0.85rem;
+    }
+    button:hover { background: #3a7bc8; }
+    button.danger { background: #d94a4a; }
+    button.danger:hover { background: #c83a3a; }
+    button.secondary { background: #888; }
+    button.secondary:hover { background: #777; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 4px; }
+    input[type="text"], input[type="number"], input[type="file"], select {
+      width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    input[type="file"] { padding: 6px; }
+    .tabs { display: flex; gap: 0; margin-bottom: 16px; }
+    .tab {
+      padding: 8px 20px; cursor: pointer; border: 1px solid #ddd;
+      background: #f5f5f5; font-size: 0.85rem; color: #666;
+    }
+    .tab:first-child { border-radius: 6px 0 0 6px; }
+    .tab:last-child { border-radius: 0 6px 6px 0; }
+    .tab.active { background: #4a90d9; color: #fff; border-color: #4a90d9; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .poll-field { display: none; }
+    .poll-field.visible { display: block; }
+    .uploaded-files { margin-top: 8px; }
+    .uploaded-file {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; font-size: 0.85rem; border-bottom: 1px solid #f0f0f0;
+    }
+    .uploaded-file:last-child { border-bottom: none; }
+    .colour-scheme { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: #e8e8e8; }
+    #modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      z-index: 100; justify-content: center; align-items: center;
+    }
+    #modal-overlay.open { display: flex; }
+    #modal { background: #fff; border-radius: 12px; padding: 24px; width: 90%; max-width: 480px; }
+    #modal h2 { margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .refresh-btn {
+      background: none; border: 1px solid #ddd; color: #666; border-radius: 6px;
+      padding: 6px 12px; font-size: 0.8rem;
+    }
+    .refresh-btn:hover { background: #f0f0f0; color: #333; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+    .header-left { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>OpenDisplay Wi-Fi</h1>
+      <div class="subtitle">
+        Manage your <a href="https://opendisplay.org" target="_blank">OpenDisplay</a> e-paper screens
+      </div>
+    </div>
+    <button class="refresh-btn" onclick="loadScreens()">Refresh</button>
+  </div>
+
+  <h2>Connected Screens</h2>
+  <div class="card" id="screens-card">
+    <div class="empty" id="no-screens">Waiting for screens to connect...</div>
+    <div id="screens-list"></div>
+  </div>
+
+  <h2>Upload Image</h2>
+  <div class="card">
+    <form id="upload-form">
+      <div class="form-group">
+        <label for="upload-file">Select an image file</label>
+        <input type="file" id="upload-file" name="image" accept="image/*">
+      </div>
+      <button type="submit">Upload</button>
+    </form>
+    <div class="uploaded-files" id="uploaded-files"></div>
+  </div>
+
+  <div id="modal-overlay">
+    <div id="modal">
+      <h2>Assign Image to <span id="modal-screen-name"></span></h2>
+      <div class="tabs">
+        <div class="tab active" data-tab="url" onclick="switchTab('url')">URL</div>
+        <div class="tab" data-tab="file" onclick="switchTab('file')">Uploaded File</div>
+      </div>
+
+      <div class="tab-content active" id="tab-url">
+        <div class="form-group">
+          <label for="assign-url">Image URL</label>
+          <input type="text" id="assign-url" placeholder="https://example.com/image.png">
+        </div>
+        <div class="form-group poll-field visible" id="poll-interval-group">
+          <label for="assign-poll">Update interval (seconds)</label>
+          <input type="number" id="assign-poll" value="300" min="10">
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-file">
+        <div class="form-group">
+          <label for="assign-file">Select uploaded file</label>
+          <select id="assign-file"></select>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">Cancel</button>
+        <button onclick="submitAssignment()">Assign</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BASE = "{{INGRESS_PATH}}";
+    let currentScreenId = null;
+    let currentTab = "url";
+
+    async function loadScreens() {
+      try {
+        const res = await fetch(`${BASE}/api/screens`);
+        const screens = await res.json();
+        const list = document.getElementById("screens-list");
+        const empty = document.getElementById("no-screens");
+
+        if (screens.length === 0) {
+          empty.style.display = "block";
+          list.innerHTML = "";
+          return;
+        }
+
+        empty.style.display = "none";
+        list.innerHTML = screens.map(s => {
+          const cs = colourSchemeName(s.colour_scheme);
+          const seenAgo = s.last_seen_seconds_ago < 60
+            ? `${s.last_seen_seconds_ago}s ago`
+            : `${Math.floor(s.last_seen_seconds_ago / 60)}m ago`;
+          let assignHtml = "";
+          if (s.assignment) {
+            const src = s.assignment.source;
+            const display = src.length > 50 ? src.substring(0, 50) + "..." : src;
+            const interval = s.assignment.type === "url"
+              ? ` (every ${s.assignment.poll_interval}s)`
+              : "";
+            assignHtml = `<div class="screen-assignment">Showing: ${escHtml(display)}${interval}</div>`;
+          }
+          return `
+            <div class="screen">
+              <div class="screen-info">
+                <strong>${s.width} x ${s.height}</strong>
+                <span class="colour-scheme">${cs}</span>
+                <div class="screen-meta">
+                  FW ${s.firmware_id}.${s.firmware_version} &middot; Last seen ${seenAgo}
+                </div>
+                ${assignHtml}
+              </div>
+              <div class="screen-actions">
+                <button onclick="openAssign('${s.id}', '${s.width}x${s.height}')">Assign Image</button>
+                ${s.assignment ? `<button class="danger" onclick="unassign('${s.id}')">Clear</button>` : ""}
+              </div>
+            </div>
+          `;
+        }).join("");
+      } catch (e) {
+        console.error("Failed to load screens:", e);
+      }
+    }
+
+    function colourSchemeName(cs) {
+      const names = { 0: "B/W", 1: "B/W/R", 2: "B/W/Y", 3: "4-Gray", 4: "7-Color" };
+      return names[cs] || `scheme ${cs}`;
+    }
+
+    function escHtml(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+      document.getElementById(`tab-${tab}`).classList.add("active");
+    }
+
+    function openAssign(screenId, label) {
+      currentScreenId = screenId;
+      document.getElementById("modal-screen-name").textContent = label;
+      document.getElementById("modal-overlay").classList.add("open");
+      loadUploads();
+    }
+
+    function closeModal() {
+      document.getElementById("modal-overlay").classList.remove("open");
+      currentScreenId = null;
+    }
+
+    async function submitAssignment() {
+      let source, pollInterval;
+
+      if (currentTab === "url") {
+        source = document.getElementById("assign-url").value.trim();
+        pollInterval = parseInt(document.getElementById("assign-poll").value) || 300;
+      } else {
+        const sel = document.getElementById("assign-file");
+        source = sel.value;
+        pollInterval = 5;
+      }
+
+      if (!source) { alert("Please provide an image source."); return; }
+
+      try {
+        await fetch(`${BASE}/api/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            screen_id: currentScreenId,
+            source: source,
+            poll_interval: pollInterval,
+          }),
+        });
+        closeModal();
+        loadScreens();
+      } catch (e) {
+        alert("Failed to assign image: " + e.message);
+      }
+    }
+
+    async function unassign(screenId) {
+      try {
+        await fetch(`${BASE}/api/unassign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ screen_id: screenId }),
+        });
+        loadScreens();
+      } catch (e) {
+        alert("Failed to clear assignment: " + e.message);
+      }
+    }
+
+    // Upload form
+    document.getElementById("upload-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("upload-file");
+      if (!fileInput.files.length) { alert("Select a file first."); return; }
+
+      const form = new FormData();
+      form.append("image", fileInput.files[0]);
+
+      try {
+        const res = await fetch(`${BASE}/api/upload`, { method: "POST", body: form });
+        const data = await res.json();
+        if (data.ok) {
+          fileInput.value = "";
+          loadUploads();
+        } else {
+          alert("Upload failed: " + (data.error || "unknown error"));
+        }
+      } catch (e) {
+        alert("Upload failed: " + e.message);
+      }
+    });
+
+    async function loadUploads() {
+      try {
+        const res = await fetch(`${BASE}/api/uploads`);
+        const files = await res.json();
+        // Update the file selector in modal
+        const sel = document.getElementById("assign-file");
+        sel.innerHTML = files.length === 0
+          ? '<option value="">No files uploaded yet</option>'
+          : files.map(f => `<option value="${escHtml(f.path)}">${escHtml(f.name)}</option>`).join("");
+
+        // Update the uploaded files list
+        const container = document.getElementById("uploaded-files");
+        if (files.length === 0) {
+          container.innerHTML = "";
+        } else {
+          container.innerHTML = "<strong style='font-size:0.85rem;color:#666;'>Uploaded files:</strong>"
+            + files.map(f => `<div class="uploaded-file"><span>${escHtml(f.name)}</span></div>`).join("");
+        }
+      } catch (e) {
+        console.error("Failed to load uploads:", e);
+      }
+    }
+
+    // Auto-refresh
+    loadScreens();
+    loadUploads();
+    setInterval(loadScreens, 10000);
+  </script>
+</body>
+</html>

@@ -473,10 +473,11 @@
           const a = s.assignment;
           if (a.type === "album") {
             const label = a.album_name || a.source;
+            const nowPlaying = a.current_image_name ? ` — Now: ${esc(a.current_image_name)}` : "";
             assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Album: ${esc(label)}</div>`;
-            if (a.current_source) {
-              const albumImage = findImageForEntry({ image_id: a.current_image_id, source: a.current_source });
-              previewSrc = resolveThumbSrc(a.current_source, albumImage?.id);
+            if (nowPlaying) assignHtml += `<div class="text-xs text-gray-500 mt-0.5">${nowPlaying}</div>`;
+            if (a.current_image_id || a.current_source) {
+              previewSrc = resolveThumbSrc(a.current_source, a.current_image_id);
             }
           } else {
             const display = a.image_name || a.source;
@@ -674,11 +675,18 @@
         if (imageId) src = imageThumbUrl(imageId);
       } else {
         const albumId = document.getElementById("assign-album").value;
-        const album = allAlbums.find((entry) => entry.id === albumId);
-        const firstEntry = album?.images?.[0];
-        const image = findImageForEntry(firstEntry);
-        if (image) src = imageThumbUrl(image.id);
-        else if (firstEntry?.source) src = resolveThumbSrc(firstEntry.source, firstEntry.image_id);
+        // If this album is currently assigned to the screen, show the real current image
+        const screen = allScreens.find((s) => s.id === assignScreenId);
+        const a = screen?.assignment;
+        if (a?.type === "album" && a.source === albumId && (a.current_image_id || a.current_source)) {
+          src = resolveThumbSrc(a.current_source, a.current_image_id);
+        } else {
+          const album = allAlbums.find((entry) => entry.id === albumId);
+          const firstEntry = album?.images?.[0];
+          const image = findImageForEntry(firstEntry);
+          if (image) src = imageThumbUrl(image.id);
+          else if (firstEntry?.source) src = resolveThumbSrc(firstEntry.source, firstEntry.image_id);
+        }
       }
 
       if (!src) {

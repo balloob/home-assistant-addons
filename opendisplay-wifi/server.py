@@ -35,8 +35,12 @@ _LOGGER = logging.getLogger(__name__)
 DATA_DIR = Path("/data")
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+THUMB_DIR = DATA_DIR / "thumbnails"
+THUMB_DIR.mkdir(parents=True, exist_ok=True)
 ASSIGNMENTS_FILE = DATA_DIR / "assignments.json"
 ALBUMS_FILE = DATA_DIR / "albums.json"
+
+THUMB_MAX_SIZE = (200, 200)
 
 # Display poll interval - kept short so UI changes are reflected quickly
 DISPLAY_POLL_INTERVAL = 30
@@ -442,6 +446,17 @@ async def handle_api_album_delete(request: web.Request) -> web.Response:
 # --- Upload / file serving ---
 
 
+def _generate_thumbnail(source: Path) -> None:
+    """Generate a JPEG thumbnail for an uploaded image."""
+    try:
+        img = Image.open(source)
+        img.thumbnail(THUMB_MAX_SIZE)
+        thumb_path = THUMB_DIR / (source.stem + ".jpg")
+        img.convert("RGB").save(thumb_path, "JPEG", quality=80)
+    except Exception:
+        _LOGGER.exception("Failed to generate thumbnail for %s", source.name)
+
+
 async def handle_api_upload(request: web.Request) -> web.Response:
     post = await request.post()
     image = post.get("image")
@@ -458,6 +473,9 @@ async def handle_api_upload(request: web.Request) -> web.Response:
     content = image.file.read()
     dest.write_bytes(content)
 
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _generate_thumbnail, dest)
+
     _LOGGER.info("Uploaded %s (%d bytes)", safe_name, len(content))
     return web.json_response({"ok": True, "path": str(dest), "name": safe_name})
 
@@ -471,6 +489,25 @@ async def handle_api_uploads(request: web.Request) -> web.Response:
     return web.json_response(files)
 
 
+async def handle_api_upload_delete(request: web.Request) -> web.Response:
+    """Delete an uploaded file and its thumbnail."""
+    filename = request.match_info["filename"]
+    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
+    if not safe_name:
+        return web.json_response({"error": "Invalid filename"}, status=400)
+
+    path = UPLOAD_DIR / safe_name
+    if path.is_file():
+        path.unlink()
+
+    thumb_path = THUMB_DIR / (Path(safe_name).stem + ".jpg")
+    if thumb_path.is_file():
+        thumb_path.unlink()
+
+    _LOGGER.info("Deleted upload %s", safe_name)
+    return web.json_response({"ok": True})
+
+
 async def handle_upload_file(request: web.Request) -> web.Response:
     """Serve an uploaded file (for preview in the UI)."""
     filename = request.match_info["filename"]
@@ -479,6 +516,24 @@ async def handle_upload_file(request: web.Request) -> web.Response:
     if not path.is_file():
         return web.Response(status=404)
     return web.FileResponse(path)
+
+
+async def handle_thumbnail(request: web.Request) -> web.Response:
+    """Serve a thumbnail for an uploaded file."""
+    filename = request.match_info["filename"]
+    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
+    # Thumbnail is always .jpg based on the stem
+    stem = Path(safe_name).stem
+    thumb_path = THUMB_DIR / (stem + ".jpg")
+    if not thumb_path.is_file():
+        # Fallback: try generating on-the-fly from the original
+        original = UPLOAD_DIR / safe_name
+        if original.is_file():
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _generate_thumbnail, original)
+        if not thumb_path.is_file():
+            return web.Response(status=404)
+    return web.FileResponse(thumb_path)
 
 
 # --- Main ---
@@ -517,7 +572,9 @@ async def run() -> None:
     app.router.add_delete("/api/albums/{album_id}", handle_api_album_delete)
     app.router.add_post("/api/upload", handle_api_upload)
     app.router.add_get("/api/uploads", handle_api_uploads)
+    app.router.add_delete("/api/uploads/{filename}", handle_api_upload_delete)
     app.router.add_get("/uploads/{filename}", handle_upload_file)
+    app.router.add_get("/thumbnails/{filename}", handle_thumbnail)
 
     runner = web.AppRunner(app)
     await runner.setup()

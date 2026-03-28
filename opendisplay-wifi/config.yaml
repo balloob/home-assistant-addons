@@ -1,6 +1,6 @@
 name: "OpenDisplay Wi-Fi"
 description: "Run an OpenDisplay Wi-Fi server for e-paper displays"
-version: "0.1.4"
+version: "0.1.5"
 slug: "opendisplay-wifi"
 init: false
 host_network: true

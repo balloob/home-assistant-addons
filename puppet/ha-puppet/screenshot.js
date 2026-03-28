@@ -33,17 +33,17 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
     for (let i = 0; i < rgbQuantizationPalette.length; i++) {
       const color = rgbQuantizationPalette[i];
 
-    const dr = r - color[0];
-    const dg = g - color[1];
-    const db = b - color[2];
+      const dr = r - color[0];
+      const dg = g - color[1];
+      const db = b - color[2];
 
-    // Do comparisons using squared distances to avoid extra computational overhead
-    // of Math.sqrt and Math.pow
-    const distanceSq = dr * dr + dg * dg + db * db;
+      // Do comparisons using squared distances to avoid extra computational overhead
+      // of Math.sqrt and Math.pow
+      const distanceSq = dr * dr + dg * dg + db * db;
 
-    if (distanceSq < minDistanceSq) {
-      minDistanceSq = distanceSq;
-	closestIndex = i;
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq;
+        closestIndex = i;
       }
     }
 
@@ -144,7 +144,6 @@ function applyErrorDiffusionDithering(data, width, height, channels, algorithm, 
 
   // For Atkinson dithering reduce error intensity for softer dithering
   const errorGain = (algorithm === "atkinson") ? 0.75 : 1.0;
-  // Distribute error to neighboring pixels
   const minTotalError = 8;
 
   for (let y = 0; y < height; y++) {
@@ -184,7 +183,7 @@ function applyErrorDiffusionDithering(data, width, height, channels, algorithm, 
       const totalError = Math.abs(errorR) + Math.abs(errorG) + Math.abs(errorB);
 
       // Skip error diffusion for near-perfect matches
-      if (totalError < 8) {
+      if (totalError < minTotalError) {
         continue;
       }
 

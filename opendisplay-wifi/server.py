@@ -66,6 +66,7 @@ THUMB_DIR = DATA_DIR / "thumbnails"
 THUMB_DIR.mkdir(parents=True, exist_ok=True)
 ASSIGNMENTS_FILE = DATA_DIR / "assignments.json"
 ALBUMS_FILE = DATA_DIR / "albums.json"
+IMAGES_FILE = DATA_DIR / "images.json"
 
 THUMB_MAX_SIZE = (200, 200)
 
@@ -84,6 +85,7 @@ assignments: dict[tuple[int, int, int], dict] = {}
 
 # Albums: id -> {"id", "name", "images": [{"type","source"}], "transition_interval", "shuffle"}
 albums: dict[str, dict] = {}
+images: dict[str, dict] = {}
 
 # Album playback state per screen key (not persisted - resets on restart)
 # {"current_index": int, "last_transition": float, "order": list[int]}
@@ -120,14 +122,39 @@ def _save_albums() -> None:
     ALBUMS_FILE.write_text(json.dumps(albums, indent=2))
 
 
+def _save_images() -> None:
+    IMAGES_FILE.write_text(json.dumps(images, indent=2))
+
+
 def _load_albums() -> None:
     if not ALBUMS_FILE.exists():
         return
     try:
         albums.update(json.loads(ALBUMS_FILE.read_text()))
+        changed = False
+        for album in albums.values():
+            images_in_album = album.get("images", [])
+            normalized = _normalize_album_images(images_in_album)
+            if normalized != images_in_album:
+                album["images"] = normalized
+                changed = True
+        if changed:
+            _save_albums()
         _LOGGER.info("Loaded %d saved albums", len(albums))
     except Exception:
         _LOGGER.exception("Failed to load saved albums")
+
+
+def _load_images() -> None:
+    if not IMAGES_FILE.exists():
+        return
+    try:
+        raw = json.loads(IMAGES_FILE.read_text())
+        if isinstance(raw, dict):
+            images.update(raw)
+        _LOGGER.info("Loaded %d saved images", len(images))
+    except Exception:
+        _LOGGER.exception("Failed to load saved images")
 
 
 # --- Helpers ---
@@ -154,21 +181,208 @@ def _is_url(source: str) -> bool:
     return source.startswith("http://") or source.startswith("https://")
 
 
+def _sanitize_filename(filename: str) -> str:
+    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
+    return safe_name or "upload.png"
+
+
+def _make_unique_filename(filename: str) -> str:
+    candidate = Path(_sanitize_filename(filename))
+    stem = candidate.stem or "upload"
+    suffix = candidate.suffix or ".png"
+    counter = 1
+    final_name = f"{stem}{suffix}"
+    while (UPLOAD_DIR / final_name).exists():
+        counter += 1
+        final_name = f"{stem}-{counter}{suffix}"
+    return final_name
+
+
+def _image_thumb_path(image_id: str) -> Path:
+    return THUMB_DIR / f"{image_id}.jpg"
+
+
+def _image_display_name(item: dict) -> str:
+    name = str(item.get("name", "")).strip()
+    if name:
+        return name
+    if item.get("type") == "file":
+        filename = item.get("filename")
+        if filename:
+            return Path(filename).stem
+        return Path(str(item.get("source", ""))).stem
+    return str(item.get("source", ""))
+
+
+def _find_image(*, image_id: str | None = None, source: str | None = None) -> dict | None:
+    if image_id:
+        return images.get(image_id)
+    if source:
+        for item in images.values():
+            if item.get("source") == source:
+                return item
+    return None
+
+
+def _serialize_image(item: dict) -> dict:
+    return {
+        "id": item["id"],
+        "name": item.get("name", ""),
+        "display_name": _image_display_name(item),
+        "type": item["type"],
+        "source": item["source"],
+        "filename": item.get("filename"),
+        "subtitle": item["source"] if item["type"] == "url" else item.get("filename", ""),
+        "created_at": item.get("created_at", 0),
+    }
+
+
+def _write_thumbnail(img: Image.Image, thumb_path: Path) -> None:
+    thumb = img.copy()
+    thumb.thumbnail(THUMB_MAX_SIZE)
+    thumb.convert("RGB").save(thumb_path, "JPEG", quality=80)
+
+
+def _fetch_url_image(source: str, timeout: int = 60) -> Image.Image:
+    with urlopen(source, timeout=timeout) as response:  # noqa: S310
+        raw = response.read()
+    img = Image.open(io.BytesIO(raw))
+    img.load()
+    return img
+
+
 def _load_image(source: str) -> Image.Image | None:
     """Load an image from a file path or URL."""
     if _is_url(source):
         try:
-            raw = urlopen(source, timeout=30).read()  # noqa: S310
-            return Image.open(io.BytesIO(raw))
+            return _fetch_url_image(source)
         except Exception:
             _LOGGER.exception("Failed to fetch URL: %s", source)
             return None
     else:
         try:
-            return Image.open(source)
+            with Image.open(source) as img:
+                img.load()
+                return img.copy()
         except Exception:
             _LOGGER.exception("Failed to load file: %s", source)
             return None
+
+
+def _generate_thumbnail(source: Path) -> None:
+    """Generate a legacy JPEG thumbnail for an uploaded image."""
+    try:
+        with Image.open(source) as img:
+            img.load()
+            _write_thumbnail(img, THUMB_DIR / (source.stem + ".jpg"))
+    except Exception:
+        _LOGGER.exception("Failed to generate thumbnail for %s", source.name)
+
+
+def _generate_library_thumbnail(image_id: str, source: str) -> None:
+    """Generate a JPEG thumbnail for an image library item."""
+    img = _load_image(source)
+    if img is None:
+        raise ValueError(f"Unable to load image source {source}")
+    _write_thumbnail(img, _image_thumb_path(image_id))
+
+
+def _clear_caches_for_source(source: str) -> None:
+    to_remove = [key for key in image_cache if key.startswith(f"{source}_")]
+    for key in to_remove:
+        image_cache.pop(key, None)
+        url_pixel_hashes.pop(f"{key}_hash", None)
+
+
+def _clear_caches_for_screen(key: tuple[int, int, int]) -> None:
+    width, height = key[0], key[1]
+    to_remove = [cache_key for cache_key in image_cache if f"_{width}x{height}_" in cache_key]
+    for cache_key in to_remove:
+        image_cache.pop(cache_key, None)
+        url_pixel_hashes.pop(f"{cache_key}_hash", None)
+
+
+def _sync_images() -> None:
+    changed = False
+
+    for image_id, item in list(images.items()):
+        item.setdefault("id", image_id)
+        item.setdefault("created_at", time.time())
+        item_type = item.get("type")
+        if item_type not in ("file", "url"):
+            del images[image_id]
+            changed = True
+            continue
+        if item_type == "file":
+            filename = item.get("filename")
+            if not filename:
+                source = item.get("source")
+                if source:
+                    filename = Path(source).name
+                    item["filename"] = filename
+                    changed = True
+            if filename:
+                item["source"] = str(UPLOAD_DIR / filename)
+            if not Path(str(item.get("source", ""))).is_file():
+                del images[image_id]
+                thumb_path = _image_thumb_path(image_id)
+                if thumb_path.exists():
+                    thumb_path.unlink()
+                changed = True
+
+    tracked_paths = {
+        item["source"]
+        for item in images.values()
+        if item.get("type") == "file" and item.get("source")
+    }
+    for path in (sorted(UPLOAD_DIR.iterdir()) if UPLOAD_DIR.exists() else []):
+        if not path.is_file():
+            continue
+        source = str(path)
+        if source in tracked_paths:
+            continue
+        image_id = uuid.uuid4().hex[:8]
+        images[image_id] = {
+            "id": image_id,
+            "name": path.stem,
+            "type": "file",
+            "source": source,
+            "filename": path.name,
+            "created_at": time.time(),
+        }
+        changed = True
+
+    if changed:
+        _save_images()
+
+
+def _normalize_album_images(entries: list[dict]) -> list[dict]:
+    normalized = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        image_id = entry.get("image_id")
+        item = _find_image(image_id=image_id) if image_id else None
+        if item is None:
+            source = str(entry.get("source", "")).strip()
+            if not source:
+                continue
+            item = _find_image(source=source)
+        if item is not None:
+            normalized.append({
+                "image_id": item["id"],
+                "type": item["type"],
+                "source": item["source"],
+            })
+            continue
+        source = str(entry.get("source", "")).strip()
+        if not source:
+            continue
+        normalized.append({
+            "type": entry.get("type") or ("url" if _is_url(source) else "file"),
+            "source": source,
+        })
+    return normalized
 
 
 def _convert_image(img: Image.Image, width: int, height: int, fit: str) -> bytes:
@@ -322,6 +536,20 @@ async def handle_api_screens(request: web.Request) -> web.Response:
                     current = _get_album_current_image(key, album)
                     if current:
                         entry["current_source"] = current["source"]
+                        current_image = _find_image(
+                            image_id=current.get("image_id"),
+                            source=current.get("source"),
+                        )
+                        if current_image:
+                            entry["current_image_id"] = current_image["id"]
+                            entry["current_image_name"] = _image_display_name(current_image)
+            else:
+                image = _find_image(
+                    image_id=assignment.get("image_id"),
+                    source=assignment.get("source"),
+                )
+                if image:
+                    entry["image_name"] = _image_display_name(image)
         result.append({
             "id": screen_id,
             "width": info["width"],
@@ -340,11 +568,12 @@ async def handle_api_assign(request: web.Request) -> web.Response:
     screen_id = data.get("screen_id")
     assign_type = data.get("type", "image")  # "image" or "album"
     source = data.get("source", "").strip()
+    image_id = data.get("image_id")
     fit = data.get("fit", "contain")
     poll_interval = data.get("poll_interval", 5)
 
-    if not screen_id or not source:
-        return web.json_response({"error": "screen_id and source required"}, status=400)
+    if not screen_id:
+        return web.json_response({"error": "screen_id required"}, status=400)
 
     key = _key_from_id(screen_id)
     if key is None:
@@ -354,27 +583,32 @@ async def handle_api_assign(request: web.Request) -> web.Response:
         fit = "contain"
 
     if assign_type == "album":
+        if not source:
+            return web.json_response({"error": "source required"}, status=400)
         if source not in albums:
             return web.json_response({"error": "Album not found"}, status=404)
         assignments[key] = {"type": "album", "source": source, "fit": fit}
         # Reset album playback state for this screen
         album_state.pop(key, None)
     else:
-        is_url = _is_url(source)
+        image = _find_image(image_id=image_id) if image_id else None
+        if image is not None:
+            source = image["source"]
+        if not source:
+            return web.json_response({"error": "source required"}, status=400)
+        if image is None:
+            image = _find_image(source=source)
+        is_url = image["type"] == "url" if image is not None else _is_url(source)
         assignments[key] = {
             "type": "image",
             "source": source,
+            "image_id": image["id"] if image is not None else None,
             "source_type": "url" if is_url else "file",
             "fit": fit,
             "poll_interval": int(poll_interval),
         }
 
-    # Clear image caches for this screen
-    width, height = key[0], key[1]
-    to_remove = [k for k in image_cache if f"_{width}x{height}_" in k]
-    for k in to_remove:
-        image_cache.pop(k, None)
-        url_pixel_hashes.pop(f"{k}_hash", None)
+    _clear_caches_for_screen(key)
 
     _save_assignments()
     _LOGGER.info("Assigned %s (%s) to screen %s [fit=%s]", source, assign_type, screen_id, fit)
@@ -414,7 +648,7 @@ async def handle_api_album_create(request: web.Request) -> web.Response:
     albums[album_id] = {
         "id": album_id,
         "name": name,
-        "images": data.get("images", []),
+        "images": _normalize_album_images(data.get("images", [])),
         "transition_interval": int(data.get("transition_interval", 60)),
         "shuffle": bool(data.get("shuffle", False)),
     }
@@ -432,7 +666,7 @@ async def handle_api_album_update(request: web.Request) -> web.Response:
     if "name" in data:
         album["name"] = data["name"]
     if "images" in data:
-        album["images"] = data["images"]
+        album["images"] = _normalize_album_images(data["images"])
     if "transition_interval" in data:
         album["transition_interval"] = int(data["transition_interval"])
     if "shuffle" in data:
@@ -442,11 +676,7 @@ async def handle_api_album_update(request: web.Request) -> web.Response:
     for key, assignment in assignments.items():
         if assignment.get("type") == "album" and assignment.get("source") == album_id:
             album_state.pop(key, None)
-            # Clear image caches
-            width, height = key[0], key[1]
-            to_remove = [k for k in image_cache if f"_{width}x{height}_" in k]
-            for k in to_remove:
-                image_cache.pop(k, None)
+            _clear_caches_for_screen(key)
 
     _save_albums()
     return web.json_response(album)
@@ -473,15 +703,13 @@ async def handle_api_album_delete(request: web.Request) -> web.Response:
 # --- Upload / file serving ---
 
 
-def _generate_thumbnail(source: Path) -> None:
-    """Generate a JPEG thumbnail for an uploaded image."""
-    try:
-        img = Image.open(source)
-        img.thumbnail(THUMB_MAX_SIZE)
-        thumb_path = THUMB_DIR / (source.stem + ".jpg")
-        img.convert("RGB").save(thumb_path, "JPEG", quality=80)
-    except Exception:
-        _LOGGER.exception("Failed to generate thumbnail for %s", source.name)
+async def handle_api_images(request: web.Request) -> web.Response:
+    ordered = sorted(
+        images.values(),
+        key=lambda item: item.get("created_at", 0),
+        reverse=True,
+    )
+    return web.json_response([_serialize_image(item) for item in ordered])
 
 
 async def handle_api_upload(request: web.Request) -> web.Response:
@@ -491,47 +719,130 @@ async def handle_api_upload(request: web.Request) -> web.Response:
     if image is None or not hasattr(image, "file"):
         return web.json_response({"error": "No image field"}, status=400)
 
-    filename = image.filename or "upload.png"
-    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
-    if not safe_name:
-        safe_name = "upload.png"
-
+    safe_name = _make_unique_filename(image.filename or "upload.png")
     dest = UPLOAD_DIR / safe_name
     content = image.file.read()
     dest.write_bytes(content)
 
+    image_id = uuid.uuid4().hex[:8]
+    item = {
+        "id": image_id,
+        "name": Path(safe_name).stem,
+        "type": "file",
+        "source": str(dest),
+        "filename": safe_name,
+        "created_at": time.time(),
+    }
+
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _generate_thumbnail, dest)
+    try:
+        await loop.run_in_executor(None, _generate_library_thumbnail, image_id, str(dest))
+    except Exception as err:
+        dest.unlink(missing_ok=True)
+        return web.json_response({"error": f"Failed to process image: {err}"}, status=400)
+
+    images[image_id] = item
+    _save_images()
 
     _LOGGER.info("Uploaded %s (%d bytes)", safe_name, len(content))
-    return web.json_response({"ok": True, "path": str(dest), "name": safe_name})
+    return web.json_response({"ok": True, "image": _serialize_image(item)})
+
+
+async def handle_api_image_url(request: web.Request) -> web.Response:
+    data = await request.json()
+    source = str(data.get("url", "")).strip()
+    name = str(data.get("name", "")).strip()
+
+    if not source:
+        return web.json_response({"error": "url required"}, status=400)
+    if not _is_url(source):
+        return web.json_response({"error": "URL must start with http:// or https://"}, status=400)
+
+    image_id = uuid.uuid4().hex[:8]
+    item = {
+        "id": image_id,
+        "name": name,
+        "type": "url",
+        "source": source,
+        "created_at": time.time(),
+    }
+
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _generate_library_thumbnail, image_id, source)
+    except Exception as err:
+        _LOGGER.warning("Failed to fetch URL image %s: %s", source, err)
+        return web.json_response({"error": f"Failed to fetch image: {err}"}, status=400)
+
+    images[image_id] = item
+    _save_images()
+    return web.json_response({"ok": True, "image": _serialize_image(item)})
 
 
 async def handle_api_uploads(request: web.Request) -> web.Response:
     files = []
-    if UPLOAD_DIR.exists():
-        for p in sorted(UPLOAD_DIR.iterdir()):
-            if p.is_file():
-                files.append({"name": p.name, "path": str(p)})
+    for item in sorted(images.values(), key=lambda entry: entry.get("created_at", 0), reverse=True):
+        if item.get("type") == "file" and item.get("filename"):
+            files.append({"name": item["filename"], "path": item["source"]})
     return web.json_response(files)
 
 
-async def handle_api_upload_delete(request: web.Request) -> web.Response:
-    """Delete an uploaded file and its thumbnail."""
-    filename = request.match_info["filename"]
-    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
-    if not safe_name:
-        return web.json_response({"error": "Invalid filename"}, status=400)
+async def handle_api_image_update(request: web.Request) -> web.Response:
+    image_id = request.match_info["image_id"]
+    item = images.get(image_id)
+    if item is None:
+        return web.json_response({"error": "Not found"}, status=404)
 
-    path = UPLOAD_DIR / safe_name
-    if path.is_file():
-        path.unlink()
+    data = await request.json()
+    if "name" not in data:
+        return web.json_response({"error": "name required"}, status=400)
 
-    thumb_path = THUMB_DIR / (Path(safe_name).stem + ".jpg")
-    if thumb_path.is_file():
-        thumb_path.unlink()
+    item["name"] = str(data.get("name", "")).strip()
+    _save_images()
+    return web.json_response({"ok": True, "image": _serialize_image(item)})
 
-    _LOGGER.info("Deleted upload %s", safe_name)
+
+async def handle_api_image_delete(request: web.Request) -> web.Response:
+    image_id = request.match_info["image_id"]
+    item = images.get(image_id)
+    if item is None:
+        return web.json_response({"error": "Not found"}, status=404)
+
+    source = item["source"]
+    if item.get("type") == "file":
+        Path(source).unlink(missing_ok=True)
+
+    thumb_path = _image_thumb_path(image_id)
+    thumb_path.unlink(missing_ok=True)
+
+    for key, assignment in list(assignments.items()):
+        if assignment.get("type") != "image":
+            continue
+        if assignment.get("image_id") == image_id or assignment.get("source") == source:
+            assignments.pop(key, None)
+            _clear_caches_for_screen(key)
+
+    changed_albums: set[str] = set()
+    for album in albums.values():
+        original_count = len(album.get("images", []))
+        album["images"] = [
+            entry for entry in album.get("images", [])
+            if entry.get("image_id") != image_id and entry.get("source") != source
+        ]
+        if len(album["images"]) != original_count:
+            changed_albums.add(album["id"])
+
+    for key, assignment in assignments.items():
+        if assignment.get("type") == "album" and assignment.get("source") in changed_albums:
+            album_state.pop(key, None)
+            _clear_caches_for_screen(key)
+
+    _clear_caches_for_source(source)
+    images.pop(image_id, None)
+    _save_images()
+    _save_albums()
+    _save_assignments()
+
     return web.json_response({"ok": True})
 
 
@@ -563,6 +874,23 @@ async def handle_thumbnail(request: web.Request) -> web.Response:
     return web.FileResponse(thumb_path)
 
 
+async def handle_thumbnail_by_id(request: web.Request) -> web.Response:
+    """Serve a thumbnail for an image library item."""
+    image_id = request.match_info["image_id"]
+    item = images.get(image_id)
+    if item is None:
+        return web.Response(status=404)
+
+    thumb_path = _image_thumb_path(image_id)
+    if not thumb_path.is_file():
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, _generate_library_thumbnail, image_id, item["source"])
+        except Exception:
+            return web.Response(status=404)
+    return web.FileResponse(thumb_path)
+
+
 # --- Main ---
 
 
@@ -574,6 +902,8 @@ async def run() -> None:
     )
     options = _load_options()
 
+    _load_images()
+    _sync_images()
     _load_albums()
     _load_assignments()
 
@@ -594,15 +924,19 @@ async def run() -> None:
     app.router.add_get("/api/screens", handle_api_screens)
     app.router.add_post("/api/assign", handle_api_assign)
     app.router.add_post("/api/unassign", handle_api_unassign)
+    app.router.add_get("/api/images", handle_api_images)
     app.router.add_get("/api/albums", handle_api_albums)
     app.router.add_post("/api/albums", handle_api_album_create)
     app.router.add_put("/api/albums/{album_id}", handle_api_album_update)
     app.router.add_delete("/api/albums/{album_id}", handle_api_album_delete)
     app.router.add_post("/api/upload", handle_api_upload)
+    app.router.add_post("/api/images/url", handle_api_image_url)
+    app.router.add_patch("/api/images/{image_id}", handle_api_image_update)
+    app.router.add_delete("/api/images/{image_id}", handle_api_image_delete)
     app.router.add_get("/api/uploads", handle_api_uploads)
-    app.router.add_delete("/api/uploads/{filename}", handle_api_upload_delete)
     app.router.add_get("/uploads/{filename}", handle_upload_file)
     app.router.add_get("/thumbnails/{filename}", handle_thumbnail)
+    app.router.add_get("/thumbnails/by-id/{image_id}", handle_thumbnail_by_id)
 
     runner = web.AppRunner(app)
     await runner.setup()

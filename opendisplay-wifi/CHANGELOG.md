@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5
+
+- Rework the image management UI around a unified image library
+- Support adding URL-backed images with generated thumbnails and gallery actions
+- Allow albums to pick from existing images and add new uploads or URLs inline
+
 ## 0.1.0
 
 - Initial release

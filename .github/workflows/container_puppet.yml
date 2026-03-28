@@ -2,10 +2,61 @@ name: 'container puppet'
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - 'puppet/config.yaml'
   workflow_dispatch:
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'push'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to release
+        id: decide
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          before="${{ github.event.before }}"
+          if [[ "$before" == "0000000000000000000000000000000000000000" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git cat-file -e "$before:puppet/config.yaml" 2>/dev/null; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous_version="$(
+            git show "$before:puppet/config.yaml" |
+              awk -F': *' '/^version:/ { gsub(/"/, "", $2); print $2; exit }'
+          )"
+          current_version="$(
+            awk -F': *' '/^version:/ { gsub(/"/, "", $2); print $2; exit }' puppet/config.yaml
+          )"
+
+          if [[ -n "$previous_version" && "$previous_version" != "$current_version" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

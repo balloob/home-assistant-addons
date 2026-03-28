@@ -216,7 +216,7 @@
   </div>
 
   <script>
-    const BASE = "{{INGRESS_PATH}}";
+    const BASE = window.location.pathname.replace(/\/$/, '');
 
     // --- State ---
     let allScreens = [];

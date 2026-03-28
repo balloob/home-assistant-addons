@@ -100,6 +100,47 @@
     }
     .image-menu-popover button:hover { background: #f8fafc; }
     .image-menu-popover button.danger { color: #dc2626; }
+    .photo-pick-item {
+      position: relative; cursor: pointer; border-radius: 10px; overflow: hidden;
+      border: 2px solid transparent; transition: border-color 0.15s;
+    }
+    .photo-pick-item.selected { border-color: var(--ha-blue); }
+    .photo-pick-item img {
+      width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #f1f5f9;
+    }
+    .photo-pick-item .pick-check {
+      position: absolute; top: 6px; right: 6px; width: 22px; height: 22px;
+      border-radius: 6px; border: 2px solid #fff; background: rgba(0,0,0,0.25);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: background 0.15s;
+    }
+    .photo-pick-item.selected .pick-check {
+      background: var(--ha-blue); border-color: #fff;
+    }
+    .photo-pick-item .pick-check svg { width: 14px; height: 14px; color: #fff; opacity: 0; }
+    .photo-pick-item.selected .pick-check svg { opacity: 1; }
+    .photo-pick-item .pick-label {
+      position: absolute; bottom: 0; left: 0; right: 0; padding: 3px 6px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.6));
+      color: #fff; font-size: 0.65rem; white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .album-chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 2px;
+      background: #f1f5f9; border-radius: 6px; font-size: 0;
+    }
+    .album-chip img {
+      width: 28px; height: 28px; object-fit: cover; border-radius: 4px; background: #e2e8f0;
+    }
+    .album-chip .chip-name {
+      font-size: 0.7rem; color: #334155; max-width: 80px; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    .album-chip .chip-remove {
+      font-size: 0.85rem; color: #94a3b8; cursor: pointer; padding: 0 2px;
+      line-height: 1;
+    }
+    .album-chip .chip-remove:hover { color: #dc2626; }
   </style>
 </head>
 <body class="p-4">
@@ -215,47 +256,57 @@
   </div>
 
   <div id="album-overlay" class="modal-overlay">
-    <div class="bg-white rounded-xl shadow-2xl p-6 w-[90%] max-w-lg max-h-[90vh] overflow-y-auto">
-      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)" id="album-editor-title">New Album</h2>
-
-      <div class="mb-3">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Album name</label>
-        <input type="text" id="album-name" class="input-ha" placeholder="My Album">
-      </div>
-
-      <div class="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Transition interval (seconds)</label>
-          <input type="number" id="album-interval" class="input-ha" value="60" min="5">
-        </div>
-        <div class="flex items-end pb-1">
-          <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" id="album-shuffle" class="w-4 h-4 rounded" style="accent-color: var(--ha-blue)">
-            <span>Shuffle</span>
-          </label>
+    <div class="bg-white rounded-xl shadow-2xl w-[95%] max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <!-- Header with save -->
+      <div class="flex items-center justify-between p-4 pb-0">
+        <h2 class="text-lg font-semibold" style="color: var(--ha-blue-dark)" id="album-editor-title">New Album</h2>
+        <div class="flex gap-2">
+          <button onclick="closeAlbumEditor()" class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancel</button>
+          <button onclick="saveAlbum()" class="btn-ha">Save</button>
         </div>
       </div>
 
-      <div class="mb-3">
-        <div class="flex items-end gap-2 mb-2">
-          <div class="flex-1">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Add image</label>
-            <select id="album-image-picker" class="input-ha"></select>
+      <div class="overflow-y-auto flex-1 p-4">
+        <!-- Album info -->
+        <div class="mb-3">
+          <input type="text" id="album-name" class="input-ha" placeholder="Album name">
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Interval (seconds)</label>
+            <input type="number" id="album-interval" class="input-ha" value="60" min="5">
           </div>
-          <button onclick="albumAddImage()" class="px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Add</button>
+          <div class="flex items-end pb-1">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" id="album-shuffle" class="w-4 h-4 rounded" style="accent-color: var(--ha-blue)">
+              <span>Shuffle</span>
+            </label>
+          </div>
         </div>
-        <div class="flex gap-2 mb-3 flex-wrap">
-          <button onclick="openFilePicker('album')" class="px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Upload images</button>
-          <button onclick="openUrlModal('album')" class="px-4 py-2 rounded-md text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Add URL</button>
-        </div>
-        <div id="album-images" class="min-h-[60px]">
-          <p class="text-gray-400 text-sm italic py-2" id="album-no-images">No images added yet</p>
-        </div>
-      </div>
 
-      <div class="flex gap-2 justify-end mt-4">
-        <button onclick="closeAlbumEditor()" class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancel</button>
-        <button onclick="saveAlbum()" class="btn-ha">Save Album</button>
+        <!-- Selected images summary -->
+        <div id="album-images-section" class="mb-4" style="display:none">
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-sm font-medium text-gray-700"><span id="album-images-count">0</span> selected</label>
+            <button onclick="albumClearAll()" class="text-xs text-red-500 hover:text-red-700">Clear all</button>
+          </div>
+          <div id="album-images" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Divider -->
+        <hr class="mb-4 border-gray-200">
+
+        <!-- Photo picker -->
+        <div class="flex items-center justify-between mb-3">
+          <label class="block text-sm font-medium text-gray-700">Add photos</label>
+          <div class="flex gap-2">
+            <button onclick="openFilePicker('album')" class="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Upload</button>
+            <button onclick="openUrlModal('album')" class="px-3 py-1.5 rounded-md text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Add URL</button>
+          </div>
+        </div>
+        <div id="album-photo-picker" class="grid grid-cols-3 sm:grid-cols-4 gap-2 min-h-[120px]">
+          <p class="text-gray-400 text-sm italic py-2 col-span-full">No images in library</p>
+        </div>
       </div>
     </div>
   </div>
@@ -422,10 +473,11 @@
           const a = s.assignment;
           if (a.type === "album") {
             const label = a.album_name || a.source;
+            const nowPlaying = a.current_image_name ? ` — Now: ${esc(a.current_image_name)}` : "";
             assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Album: ${esc(label)}</div>`;
-            if (a.current_source) {
-              const albumImage = findImageForEntry({ image_id: a.current_image_id, source: a.current_source });
-              previewSrc = resolveThumbSrc(a.current_source, albumImage?.id);
+            if (nowPlaying) assignHtml += `<div class="text-xs text-gray-500 mt-0.5">${nowPlaying}</div>`;
+            if (a.current_image_id || a.current_source) {
+              previewSrc = resolveThumbSrc(a.current_source, a.current_image_id);
             }
           } else {
             const display = a.image_name || a.source;
@@ -588,12 +640,7 @@
     }
 
     function populateAlbumImagePicker() {
-      const sel = document.getElementById("album-image-picker");
-      if (!sel) return;
-      sel.innerHTML = allImages.length === 0
-        ? '<option value="">No images available</option>'
-        : '<option value="">-- Select an image --</option>' + allImages.map((image) =>
-          `<option value="${image.id}">${esc(image.display_name)}${image.type === "url" ? " (URL)" : ""}</option>`).join("");
+      renderAlbumPhotoPicker();
     }
 
     function onAssignImageSelect() {
@@ -628,11 +675,18 @@
         if (imageId) src = imageThumbUrl(imageId);
       } else {
         const albumId = document.getElementById("assign-album").value;
-        const album = allAlbums.find((entry) => entry.id === albumId);
-        const firstEntry = album?.images?.[0];
-        const image = findImageForEntry(firstEntry);
-        if (image) src = imageThumbUrl(image.id);
-        else if (firstEntry?.source) src = resolveThumbSrc(firstEntry.source, firstEntry.image_id);
+        // If this album is currently assigned to the screen, show the real current image
+        const screen = allScreens.find((s) => s.id === assignScreenId);
+        const a = screen?.assignment;
+        if (a?.type === "album" && a.source === albumId && (a.current_image_id || a.current_source)) {
+          src = resolveThumbSrc(a.current_source, a.current_image_id);
+        } else {
+          const album = allAlbums.find((entry) => entry.id === albumId);
+          const firstEntry = album?.images?.[0];
+          const image = findImageForEntry(firstEntry);
+          if (image) src = imageThumbUrl(image.id);
+          else if (firstEntry?.source) src = resolveThumbSrc(firstEntry.source, firstEntry.image_id);
+        }
       }
 
       if (!src) {
@@ -724,45 +778,86 @@
       editingAlbumId = null;
     }
 
-    function renderAlbumImages() {
-      const container = document.getElementById("album-images");
+    function getAlbumImageIds() {
+      return new Set(albumImages.map((e) => e.image_id));
+    }
+
+    function renderAlbumPhotoPicker() {
+      const container = document.getElementById("album-photo-picker");
       if (!container) return;
-      if (albumImages.length === 0) {
-        container.innerHTML = '<p class="text-gray-400 text-sm italic py-2" id="album-no-images">No images added yet</p>';
+      const addedIds = getAlbumImageIds();
+      const available = allImages.filter((img) => !addedIds.has(img.id));
+
+      if (available.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm italic py-2 col-span-full">' +
+          (allImages.length === 0 ? 'No images in library' : 'All images added') + '</p>';
         return;
       }
 
-      const html = albumImages.map((entry, index) => {
+      container.innerHTML = available.map((image) => {
+        const thumb = imageThumbUrl(image.id);
+        return `
+          <div class="photo-pick-item" onclick="togglePickImage('${image.id}')" title="${esc(image.display_name)}">
+            <img src="${esc(thumb)}" onerror="this.style.background='#e2e8f0'">
+            <div class="pick-check">
+              <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            </div>
+            <div class="pick-label">${esc(image.display_name)}</div>
+          </div>`;
+      }).join("");
+    }
+
+    function renderAlbumImages() {
+      const container = document.getElementById("album-images");
+      const section = document.getElementById("album-images-section");
+      const countEl = document.getElementById("album-images-count");
+      if (!container) return;
+
+      countEl.textContent = albumImages.length;
+      if (albumImages.length === 0) {
+        section.style.display = "none";
+        return;
+      }
+      section.style.display = "block";
+
+      container.innerHTML = albumImages.map((entry, index) => {
         const image = findImageForEntry(entry);
-        const label = image?.display_name || entry.source || "Unknown image";
-        const subtitle = image?.subtitle || entry.source || "";
+        const label = image?.display_name || entry.source || "Unknown";
         const thumb = image ? imageThumbUrl(image.id) : resolveThumbSrc(entry.source, entry.image_id);
         return `
-          <div class="album-image-item">
-            <img src="${esc(thumb)}" onerror="this.outerHTML='<div class=\\'no-thumb\\'>?</div>'">
-            <div class="flex-1 min-w-0">
-              <div class="text-sm text-gray-700 truncate" title="${esc(label)}">${esc(label)}</div>
-              <div class="text-xs text-gray-400 truncate" title="${esc(subtitle)}">${esc(subtitle)}</div>
-            </div>
-            <button onclick="albumRemoveImage(${index})" class="text-red-400 hover:text-red-600 text-sm px-1">&times;</button>
+          <div class="album-chip">
+            <img src="${esc(thumb)}" onerror="this.style.background='#e2e8f0'">
+            <span class="chip-name" title="${esc(label)}">${esc(label)}</span>
+            <span class="chip-remove" onclick="albumRemoveImage(${index})">&times;</span>
           </div>`;
       }).join("");
 
-      container.innerHTML = html;
+      renderAlbumPhotoPicker();
     }
 
-    function albumAddImage() {
-      const imageId = document.getElementById("album-image-picker").value;
-      const image = findImageById(imageId);
-      if (!image) {
-        alert("Select an image.");
-        return;
+    function togglePickImage(imageId) {
+      const addedIds = getAlbumImageIds();
+      if (addedIds.has(imageId)) {
+        // Remove it
+        const idx = albumImages.findIndex((e) => e.image_id === imageId);
+        if (idx >= 0) albumImages.splice(idx, 1);
+      } else {
+        // Add it
+        const image = findImageById(imageId);
+        if (image) {
+          albumImages.push({ image_id: image.id, type: image.type, source: image.source });
+        }
       }
-      addImagesToAlbum([image]);
+      renderAlbumImages();
     }
 
     function albumRemoveImage(index) {
       albumImages.splice(index, 1);
+      renderAlbumImages();
+    }
+
+    function albumClearAll() {
+      albumImages = [];
       renderAlbumImages();
     }
 
@@ -816,7 +911,6 @@
       images.forEach((image) => {
         albumImages.push({ image_id: image.id, type: image.type, source: image.source });
       });
-      document.getElementById("album-image-picker").value = images[images.length - 1].id;
       renderAlbumImages();
     }
 

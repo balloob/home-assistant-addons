@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenDisplay Wi-Fi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --ha-blue: #03a9f4; --ha-blue-dark: #0288d1; --ha-blue-light: #4fc3f7; }
+    body { background: linear-gradient(135deg, #03a9f4 0%, #0288d1 100%); min-height: 100vh; }
+    .colour-scheme {
+      display: inline-block; padding: 2px 8px; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 500; background: #e0f2fe; color: #0369a1;
+    }
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      z-index: 100; justify-content: center; align-items: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .preview-frame {
+      background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; position: relative; margin: 0 auto;
+    }
+    .preview-frame img { display: block; }
+    .preview-frame .empty-label {
+      color: #94a3b8; font-size: 0.8rem; position: absolute;
+    }
+    .btn-ha {
+      background: var(--ha-blue); color: #fff; border: none; border-radius: 6px;
+      padding: 8px 16px; cursor: pointer; font-size: 0.85rem; font-weight: 500;
+      transition: background 0.2s;
+    }
+    .btn-ha:hover { background: var(--ha-blue-dark); }
+    .input-ha {
+      width: 100%; padding: 8px 12px; border: 1px solid var(--ha-blue-light);
+      border-radius: 6px; font-size: 0.9rem;
+    }
+    .input-ha:focus { outline: none; ring: 2px; border-color: var(--ha-blue); }
+    .album-image-item {
+      display: flex; align-items: center; gap: 8px; padding: 8px;
+      background: #f8fafc; border-radius: 6px; margin-bottom: 6px;
+    }
+    .album-image-item img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; background: #e2e8f0; }
+    .album-image-item .no-thumb { width: 48px; height: 48px; border-radius: 4px; background: #e2e8f0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.7rem; }
+  </style>
+</head>
+<body class="p-4">
+  <div class="container mx-auto max-w-3xl">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-white">OpenDisplay Wi-Fi</h1>
+        <p class="text-blue-100 text-sm mt-1">
+          Manage your <a href="https://opendisplay.org" target="_blank" class="underline text-white hover:text-blue-200">OpenDisplay</a> e-paper screens
+        </p>
+      </div>
+      <button onclick="refreshAll()" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm transition duration-200">
+        Refresh
+      </button>
+    </div>
+
+    <!-- Connected Screens -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)">Connected Screens</h2>
+      <div id="no-screens" class="text-gray-400 italic py-4">Waiting for screens to connect...</div>
+      <div id="screens-list" class="divide-y divide-gray-100"></div>
+    </div>
+
+    <!-- Albums -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold" style="color: var(--ha-blue-dark)">Albums</h2>
+        <button onclick="openAlbumEditor()" class="btn-ha text-sm">New Album</button>
+      </div>
+      <div id="no-albums" class="text-gray-400 italic py-4">No albums yet</div>
+      <div id="albums-list" class="divide-y divide-gray-100"></div>
+    </div>
+
+    <!-- Upload Image -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)">Upload Image</h2>
+      <form id="upload-form" class="flex gap-3 items-end">
+        <div class="flex-1">
+          <label for="upload-file" class="block text-sm font-medium text-gray-700 mb-1">Select an image file</label>
+          <input type="file" id="upload-file" name="image" accept="image/*" class="input-ha text-sm">
+        </div>
+        <button type="submit" class="btn-ha">Upload</button>
+      </form>
+      <div id="uploaded-files" class="mt-4"></div>
+    </div>
+
+    <!-- Attribution -->
+    <div class="text-center text-blue-100 text-xs py-4">
+      Powered by <a href="https://opendisplay.org" target="_blank" class="underline text-white">OpenDisplay</a>
+      &middot;
+      <a href="https://github.com/balloob/py-opendisplay/tree/wifi-server" target="_blank" class="underline text-white">py-opendisplay</a>
+    </div>
+  </div>
+
+  <!-- Assign Modal -->
+  <div id="assign-overlay" class="modal-overlay">
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-[90%] max-w-lg max-h-[90vh] overflow-y-auto">
+      <h2 class="text-lg font-semibold mb-1" style="color: var(--ha-blue-dark)">
+        Assign to <span id="assign-screen-name"></span>
+      </h2>
+      <p class="text-xs text-gray-400 mb-4" id="assign-screen-dims"></p>
+
+      <!-- Preview -->
+      <div class="mb-4">
+        <div class="preview-frame" id="assign-preview-frame">
+          <span class="empty-label">Select an image to preview</span>
+        </div>
+      </div>
+
+      <!-- Fit mode -->
+      <div class="flex gap-3 mb-4">
+        <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="assign-fit" value="contain" checked onchange="updatePreview()">
+          <span>Contain</span>
+          <span class="text-xs text-gray-400">(letterbox)</span>
+        </label>
+        <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+          <input type="radio" name="assign-fit" value="cover" onchange="updatePreview()">
+          <span>Cover</span>
+          <span class="text-xs text-gray-400">(crop)</span>
+        </label>
+      </div>
+
+      <!-- Tabs: URL / File / Album -->
+      <div class="flex mb-4 rounded-lg overflow-hidden border" style="border-color: var(--ha-blue-light)">
+        <button class="assign-tab flex-1 py-2 text-sm font-medium text-white" data-tab="url" onclick="switchAssignTab('url')" style="background: var(--ha-blue)">URL</button>
+        <button class="assign-tab flex-1 py-2 text-sm font-medium text-gray-600 bg-gray-50" data-tab="file" onclick="switchAssignTab('file')">File</button>
+        <button class="assign-tab flex-1 py-2 text-sm font-medium text-gray-600 bg-gray-50" data-tab="album" onclick="switchAssignTab('album')">Album</button>
+      </div>
+
+      <div class="tab-content active" id="assign-tab-url">
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+          <input type="text" id="assign-url" placeholder="https://example.com/image.png" class="input-ha" oninput="onUrlInput()">
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Update interval (seconds)</label>
+          <input type="number" id="assign-poll" value="300" min="10" class="input-ha">
+        </div>
+      </div>
+
+      <div class="tab-content" id="assign-tab-file">
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Select uploaded file</label>
+          <select id="assign-file" class="input-ha" onchange="onFileSelect()"></select>
+        </div>
+      </div>
+
+      <div class="tab-content" id="assign-tab-album">
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Select album</label>
+          <select id="assign-album" class="input-ha" onchange="onAlbumSelect()">
+            <option value="">-- Select an album --</option>
+          </select>
+        </div>
+        <div id="assign-album-info" class="text-sm text-gray-500 mt-2"></div>
+      </div>
+
+      <div class="flex gap-2 justify-end mt-4">
+        <button onclick="closeAssignModal()" class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancel</button>
+        <button onclick="submitAssignment()" class="btn-ha">Assign</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Album Editor Modal -->
+  <div id="album-overlay" class="modal-overlay">
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-[90%] max-w-lg max-h-[90vh] overflow-y-auto">
+      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)" id="album-editor-title">New Album</h2>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Album name</label>
+        <input type="text" id="album-name" class="input-ha" placeholder="My Album">
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Transition interval (seconds)</label>
+          <input type="number" id="album-interval" class="input-ha" value="60" min="5">
+        </div>
+        <div class="flex items-end pb-1">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" id="album-shuffle" class="w-4 h-4 rounded" style="accent-color: var(--ha-blue)">
+            <span>Shuffle</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-sm font-medium text-gray-700">Images</label>
+          <div class="flex gap-2">
+            <button onclick="albumAddUrl()" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">+ URL</button>
+            <button onclick="albumAddFile()" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">+ File</button>
+          </div>
+        </div>
+        <div id="album-images" class="min-h-[60px]">
+          <p class="text-gray-400 text-sm italic py-2" id="album-no-images">No images added yet</p>
+        </div>
+      </div>
+
+      <div class="flex gap-2 justify-end mt-4">
+        <button onclick="closeAlbumEditor()" class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Cancel</button>
+        <button onclick="saveAlbum()" class="btn-ha">Save Album</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BASE = "{{INGRESS_PATH}}";
+
+    // --- State ---
+    let allScreens = [];
+    let allAlbums = [];
+    let allUploads = [];
+
+    let assignScreenId = null;
+    let assignScreenWidth = 0;
+    let assignScreenHeight = 0;
+    let assignTab = "url";
+
+    let editingAlbumId = null;
+    let albumImages = []; // [{type:"file"|"url", source:"..."}]
+
+    // --- Data loading ---
+    async function loadScreens() {
+      try {
+        const res = await fetch(`${BASE}/api/screens`);
+        allScreens = await res.json();
+        renderScreens();
+      } catch (e) { console.error("Failed to load screens:", e); }
+    }
+
+    async function loadAlbums() {
+      try {
+        const res = await fetch(`${BASE}/api/albums`);
+        allAlbums = await res.json();
+        renderAlbums();
+      } catch (e) { console.error("Failed to load albums:", e); }
+    }
+
+    async function loadUploads() {
+      try {
+        const res = await fetch(`${BASE}/api/uploads`);
+        allUploads = await res.json();
+        renderUploads();
+      } catch (e) { console.error("Failed to load uploads:", e); }
+    }
+
+    function refreshAll() { loadScreens(); loadAlbums(); loadUploads(); }
+
+    // --- Render screens ---
+    function renderScreens() {
+      const list = document.getElementById("screens-list");
+      const empty = document.getElementById("no-screens");
+      if (allScreens.length === 0) { empty.style.display = "block"; list.innerHTML = ""; return; }
+      empty.style.display = "none";
+
+      list.innerHTML = allScreens.map(s => {
+        const cs = colourSchemeName(s.colour_scheme);
+        const seenAgo = s.last_seen_seconds_ago < 60
+          ? `${s.last_seen_seconds_ago}s ago`
+          : `${Math.floor(s.last_seen_seconds_ago / 60)}m ago`;
+
+        let assignHtml = "";
+        let previewSrc = "";
+        if (s.assignment) {
+          const a = s.assignment;
+          if (a.type === "album") {
+            const info = a.album_name || a.source;
+            assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Album: ${esc(info)}</div>`;
+            if (a.current_source) previewSrc = resolvePreviewSrc(a.current_source);
+          } else {
+            const src = a.source;
+            const display = src.length > 50 ? src.substring(0, 50) + "..." : src;
+            const interval = a.source_type === "url" ? ` (every ${a.poll_interval}s)` : "";
+            assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Image: ${esc(display)}${interval}</div>`;
+            previewSrc = resolvePreviewSrc(src);
+          }
+          const fitLabel = (a.fit || "contain") === "cover" ? "Cover" : "Contain";
+          assignHtml += `<div class="text-xs text-gray-400 mt-0.5">Fit: ${fitLabel}</div>`;
+        }
+
+        // Inline preview at screen aspect ratio
+        const previewMaxW = 160;
+        const aspect = s.width / s.height;
+        const pw = aspect >= 1 ? previewMaxW : Math.round(previewMaxW * aspect);
+        const ph = aspect >= 1 ? Math.round(previewMaxW / aspect) : previewMaxW;
+        const fitMode = s.assignment?.fit || "contain";
+
+        let previewHtml = "";
+        if (previewSrc) {
+          previewHtml = `
+            <div class="preview-frame mt-2" style="width:${pw}px;height:${ph}px;">
+              <img src="${esc(previewSrc)}" style="width:100%;height:100%;object-fit:${fitMode};" onerror="this.style.display='none'">
+            </div>`;
+        }
+
+        return `
+          <div class="py-3">
+            <div class="flex items-start justify-between">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-gray-800">${s.width} x ${s.height}</span>
+                  <span class="colour-scheme">${cs}</span>
+                </div>
+                <div class="text-xs text-gray-400 mt-1">FW ${s.firmware_id}.${s.firmware_version} &middot; Last seen ${seenAgo}</div>
+                ${assignHtml}
+              </div>
+              <div class="flex gap-2 ml-3 flex-shrink-0">
+                <button onclick="openAssignModal('${s.id}', ${s.width}, ${s.height})" class="btn-ha text-sm px-3 py-1.5">Assign</button>
+                ${s.assignment ? `<button onclick="unassign('${s.id}')" class="px-3 py-1.5 rounded-md text-white text-sm font-medium bg-red-500 hover:bg-red-600">Clear</button>` : ""}
+              </div>
+            </div>
+            ${previewHtml}
+          </div>`;
+      }).join("");
+    }
+
+    // --- Render albums ---
+    function renderAlbums() {
+      const list = document.getElementById("albums-list");
+      const empty = document.getElementById("no-albums");
+      if (allAlbums.length === 0) { empty.style.display = "block"; list.innerHTML = ""; return; }
+      empty.style.display = "none";
+
+      list.innerHTML = allAlbums.map(a => {
+        const imgs = a.images || [];
+        const shuffleLabel = a.shuffle ? "Shuffle" : "In order";
+        return `
+          <div class="flex items-center justify-between py-3">
+            <div class="flex-1 min-w-0">
+              <span class="font-semibold text-gray-800">${esc(a.name)}</span>
+              <div class="text-xs text-gray-400 mt-1">
+                ${imgs.length} image${imgs.length !== 1 ? "s" : ""} &middot; ${a.transition_interval}s interval &middot; ${shuffleLabel}
+              </div>
+            </div>
+            <div class="flex gap-2 ml-3 flex-shrink-0">
+              <button onclick="openAlbumEditor('${a.id}')" class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200">Edit</button>
+              <button onclick="deleteAlbum('${a.id}')" class="px-3 py-1.5 rounded-md text-white text-sm font-medium bg-red-500 hover:bg-red-600">Delete</button>
+            </div>
+          </div>`;
+      }).join("");
+    }
+
+    // --- Render uploads ---
+    function renderUploads() {
+      const container = document.getElementById("uploaded-files");
+      if (allUploads.length === 0) { container.innerHTML = ""; return; }
+      container.innerHTML = `<p class="text-sm font-medium text-gray-500 mb-2">Uploaded files</p>`
+        + `<div class="divide-y divide-gray-100">`
+        + allUploads.map(f => `
+          <div class="flex items-center gap-3 py-2">
+            <img src="${BASE}/uploads/${esc(f.name)}" class="w-10 h-10 object-cover rounded bg-gray-100" onerror="this.style.display='none'">
+            <span class="text-sm text-gray-700 flex-1">${esc(f.name)}</span>
+          </div>`).join("")
+        + `</div>`;
+    }
+
+    // --- Assign modal ---
+    function openAssignModal(screenId, w, h) {
+      assignScreenId = screenId;
+      assignScreenWidth = w;
+      assignScreenHeight = h;
+      document.getElementById("assign-screen-name").textContent = `${w}x${h}`;
+      document.getElementById("assign-screen-dims").textContent = `Screen resolution: ${w} x ${h} pixels`;
+
+      // Size preview frame to screen aspect ratio
+      const maxW = 300;
+      const aspect = w / h;
+      const pw = aspect >= 1 ? maxW : Math.round(maxW * aspect);
+      const ph = aspect >= 1 ? Math.round(maxW / aspect) : maxW;
+      const frame = document.getElementById("assign-preview-frame");
+      frame.style.width = pw + "px";
+      frame.style.height = ph + "px";
+      frame.innerHTML = '<span class="empty-label">Select an image to preview</span>';
+
+      // Populate selectors
+      populateFileSelect("assign-file");
+      populateAlbumSelect();
+
+      // Reset fit to contain
+      document.querySelector('input[name="assign-fit"][value="contain"]').checked = true;
+
+      switchAssignTab("url");
+      document.getElementById("assign-overlay").classList.add("open");
+    }
+
+    function closeAssignModal() {
+      document.getElementById("assign-overlay").classList.remove("open");
+      assignScreenId = null;
+    }
+
+    function switchAssignTab(tab) {
+      assignTab = tab;
+      document.querySelectorAll(".assign-tab").forEach(t => {
+        const active = t.dataset.tab === tab;
+        t.style.background = active ? "var(--ha-blue)" : "#f9fafb";
+        t.className = `assign-tab flex-1 py-2 text-sm font-medium ${active ? "text-white" : "text-gray-600 bg-gray-50"}`;
+      });
+      ["url", "file", "album"].forEach(t => {
+        const el = document.getElementById(`assign-tab-${t}`);
+        el.classList.toggle("active", t === tab);
+      });
+      updatePreview();
+    }
+
+    function getSelectedFit() {
+      return document.querySelector('input[name="assign-fit"]:checked')?.value || "contain";
+    }
+
+    function resolvePreviewSrc(source) {
+      if (source.startsWith("http://") || source.startsWith("https://")) return source;
+      // Local file - extract filename and serve via our endpoint
+      const parts = source.split("/");
+      const name = parts[parts.length - 1];
+      return `${BASE}/uploads/${encodeURIComponent(name)}`;
+    }
+
+    function updatePreview() {
+      const frame = document.getElementById("assign-preview-frame");
+      const fit = getSelectedFit();
+      let src = null;
+
+      if (assignTab === "url") {
+        const url = document.getElementById("assign-url").value.trim();
+        if (url && (url.startsWith("http://") || url.startsWith("https://"))) src = url;
+      } else if (assignTab === "file") {
+        const sel = document.getElementById("assign-file");
+        if (sel.value) src = resolvePreviewSrc(sel.value);
+      } else if (assignTab === "album") {
+        const albumId = document.getElementById("assign-album").value;
+        const album = allAlbums.find(a => a.id === albumId);
+        if (album && album.images.length > 0) {
+          src = resolvePreviewSrc(album.images[0].source);
+        }
+      }
+
+      if (!src) {
+        frame.innerHTML = '<span class="empty-label">Select an image to preview</span>';
+        return;
+      }
+
+      frame.innerHTML = `<img src="${esc(src)}" style="width:100%;height:100%;object-fit:${fit};background:#f1f5f9;" onerror="this.parentElement.innerHTML='<span class=\\'empty-label\\'>Failed to load preview</span>'">`;
+    }
+
+    function onUrlInput() {
+      // Debounced preview update for URL input
+      clearTimeout(onUrlInput._timer);
+      onUrlInput._timer = setTimeout(updatePreview, 500);
+    }
+    function onFileSelect() { updatePreview(); }
+    function onAlbumSelect() {
+      const albumId = document.getElementById("assign-album").value;
+      const album = allAlbums.find(a => a.id === albumId);
+      const info = document.getElementById("assign-album-info");
+      if (album) {
+        const shuffleLabel = album.shuffle ? "shuffle" : "in order";
+        info.textContent = `${album.images.length} images, ${album.transition_interval}s interval, ${shuffleLabel}`;
+      } else {
+        info.textContent = "";
+      }
+      updatePreview();
+    }
+
+    async function submitAssignment() {
+      const fit = getSelectedFit();
+      let body;
+
+      if (assignTab === "url") {
+        const source = document.getElementById("assign-url").value.trim();
+        const poll = parseInt(document.getElementById("assign-poll").value) || 300;
+        if (!source) { alert("Enter a URL."); return; }
+        body = { screen_id: assignScreenId, type: "image", source, fit, poll_interval: poll };
+      } else if (assignTab === "file") {
+        const source = document.getElementById("assign-file").value;
+        if (!source) { alert("Select a file."); return; }
+        body = { screen_id: assignScreenId, type: "image", source, fit, poll_interval: 5 };
+      } else {
+        const albumId = document.getElementById("assign-album").value;
+        if (!albumId) { alert("Select an album."); return; }
+        body = { screen_id: assignScreenId, type: "album", source: albumId, fit };
+      }
+
+      try {
+        await fetch(`${BASE}/api/assign`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        closeAssignModal();
+        loadScreens();
+      } catch (e) { alert("Failed: " + e.message); }
+    }
+
+    async function unassign(screenId) {
+      await fetch(`${BASE}/api/unassign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ screen_id: screenId }),
+      });
+      loadScreens();
+    }
+
+    // --- Album editor ---
+    function openAlbumEditor(albumId) {
+      editingAlbumId = albumId || null;
+      const title = document.getElementById("album-editor-title");
+
+      if (albumId) {
+        const album = allAlbums.find(a => a.id === albumId);
+        if (!album) return;
+        title.textContent = "Edit Album";
+        document.getElementById("album-name").value = album.name;
+        document.getElementById("album-interval").value = album.transition_interval;
+        document.getElementById("album-shuffle").checked = album.shuffle;
+        albumImages = (album.images || []).map(i => ({ ...i }));
+      } else {
+        title.textContent = "New Album";
+        document.getElementById("album-name").value = "";
+        document.getElementById("album-interval").value = 60;
+        document.getElementById("album-shuffle").checked = false;
+        albumImages = [];
+      }
+      renderAlbumImages();
+      document.getElementById("album-overlay").classList.add("open");
+    }
+
+    function closeAlbumEditor() {
+      document.getElementById("album-overlay").classList.remove("open");
+      editingAlbumId = null;
+    }
+
+    function renderAlbumImages() {
+      const container = document.getElementById("album-images");
+      const empty = document.getElementById("album-no-images");
+      if (albumImages.length === 0) {
+        empty.style.display = "block";
+        container.querySelectorAll(".album-image-item").forEach(e => e.remove());
+        return;
+      }
+      empty.style.display = "none";
+
+      let html = "";
+      albumImages.forEach((img, i) => {
+        const src = resolvePreviewSrc(img.source);
+        const isUrl = img.source.startsWith("http://") || img.source.startsWith("https://");
+        const label = isUrl ? img.source : img.source.split("/").pop();
+        const displayLabel = label.length > 40 ? label.substring(0, 40) + "..." : label;
+        html += `
+          <div class="album-image-item">
+            <img src="${esc(src)}" onerror="this.outerHTML='<div class=\\'no-thumb\\'>?</div>'">
+            <span class="flex-1 text-sm text-gray-700 truncate" title="${esc(label)}">${esc(displayLabel)}</span>
+            <button onclick="albumRemoveImage(${i})" class="text-red-400 hover:text-red-600 text-sm px-1">&times;</button>
+          </div>`;
+      });
+      // Replace only the item elements, keep the empty label
+      container.innerHTML = `<p class="text-gray-400 text-sm italic py-2" id="album-no-images" style="display:none">No images added yet</p>` + html;
+    }
+
+    function albumAddUrl() {
+      const url = prompt("Enter image URL:");
+      if (!url || !url.trim()) return;
+      albumImages.push({ type: "url", source: url.trim() });
+      renderAlbumImages();
+    }
+
+    function albumAddFile() {
+      if (allUploads.length === 0) { alert("Upload some images first."); return; }
+      // Show a quick selector
+      const names = allUploads.map(f => f.name);
+      const choice = prompt("Enter filename to add:\n\nAvailable: " + names.join(", "));
+      if (!choice) return;
+      const file = allUploads.find(f => f.name === choice.trim());
+      if (!file) { alert("File not found. Enter the exact filename."); return; }
+      albumImages.push({ type: "file", source: file.path });
+      renderAlbumImages();
+    }
+
+    function albumRemoveImage(idx) {
+      albumImages.splice(idx, 1);
+      renderAlbumImages();
+    }
+
+    async function saveAlbum() {
+      const name = document.getElementById("album-name").value.trim();
+      if (!name) { alert("Enter a name."); return; }
+
+      const body = {
+        name,
+        images: albumImages,
+        transition_interval: parseInt(document.getElementById("album-interval").value) || 60,
+        shuffle: document.getElementById("album-shuffle").checked,
+      };
+
+      try {
+        if (editingAlbumId) {
+          await fetch(`${BASE}/api/albums/${editingAlbumId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } else {
+          await fetch(`${BASE}/api/albums`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        }
+        closeAlbumEditor();
+        loadAlbums();
+      } catch (e) { alert("Failed: " + e.message); }
+    }
+
+    async function deleteAlbum(albumId) {
+      if (!confirm("Delete this album?")) return;
+      await fetch(`${BASE}/api/albums/${albumId}`, { method: "DELETE" });
+      loadAlbums();
+      loadScreens();
+    }
+
+    // --- Upload ---
+    document.getElementById("upload-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("upload-file");
+      if (!fileInput.files.length) { alert("Select a file first."); return; }
+      const form = new FormData();
+      form.append("image", fileInput.files[0]);
+      try {
+        const res = await fetch(`${BASE}/api/upload`, { method: "POST", body: form });
+        const data = await res.json();
+        if (data.ok) { fileInput.value = ""; loadUploads(); }
+        else { alert("Upload failed: " + (data.error || "unknown")); }
+      } catch (e) { alert("Upload failed: " + e.message); }
+    });
+
+    // --- Helpers ---
+    function populateFileSelect(selectId) {
+      const sel = document.getElementById(selectId);
+      sel.innerHTML = allUploads.length === 0
+        ? '<option value="">No files uploaded</option>'
+        : '<option value="">-- Select a file --</option>' + allUploads.map(f =>
+            `<option value="${esc(f.path)}">${esc(f.name)}</option>`).join("");
+    }
+
+    function populateAlbumSelect() {
+      const sel = document.getElementById("assign-album");
+      sel.innerHTML = '<option value="">-- Select an album --</option>'
+        + allAlbums.map(a => `<option value="${a.id}">${esc(a.name)} (${a.images.length} images)</option>`).join("");
+    }
+
+    function colourSchemeName(cs) {
+      return { 0: "B/W", 1: "B/W/R", 2: "B/W/Y", 3: "4-Gray", 4: "7-Color" }[cs] || `scheme ${cs}`;
+    }
+
+    function esc(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // --- Init ---
+    refreshAll();
+    setInterval(loadScreens, 10000);
+  </script>
+</body>
+</html>

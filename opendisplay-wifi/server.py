@@ -23,6 +23,7 @@ from PIL import Image
 from opendisplay.wifi import DEFAULT_PORT, OpenDisplayServer
 from opendisplay.wifi.imaging import image_to_1bpp
 from opendisplay.wifi.protocol import DisplayAnnouncement
+from epaper_dithering import MONO_4_26, DitherMode, dither_image
 from opendisplay.encoding.images import fit_image
 from opendisplay.models.enums import FitMode
 
@@ -148,8 +149,6 @@ def _convert_image(img: Image.Image, width: int, height: int, fit: str) -> bytes
     """Convert a PIL image to 1bpp with the given fit mode."""
     fit_mode = FitMode.COVER if fit == "cover" else FitMode.CONTAIN
     fitted = fit_image(img, (width, height), fit_mode)
-
-    from epaper_dithering import MONO_4_26, DitherMode, dither_image
     dithered = dither_image(fitted, MONO_4_26, mode=DitherMode.FLOYD_STEINBERG)
     return dithered.convert("1").tobytes("raw", "1")
 
@@ -216,6 +215,7 @@ def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
         return None
 
     key = _screen_key(announcement)
+    screen_id = _screen_id(key)
 
     # Track this screen
     if key not in screens:
@@ -230,44 +230,58 @@ def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
 
     assignment = assignments.get(key)
     if assignment is None:
+        _LOGGER.info("No assignment for screen %s", screen_id)
         return None
 
-    resolved = _resolve_source(assignment, key)
-    if resolved is None:
-        return None
+    try:
+        resolved = _resolve_source(assignment, key)
+        if resolved is None:
+            _LOGGER.warning("Could not resolve source for screen %s: %s", screen_id, assignment)
+            return None
 
-    source, source_type = resolved
-    width = announcement.width
-    height = announcement.height
-    fit = assignment.get("fit", "contain")
-    cache_key = f"{source}_{width}x{height}_{fit}"
+        source, source_type = resolved
+        width = announcement.width
+        height = announcement.height
+        fit = assignment.get("fit", "contain")
+        cache_key = f"{source}_{width}x{height}_{fit}"
 
-    if source_type == "url" or _is_url(source):
+        if source_type == "url" or _is_url(source):
+            img = _load_image(source)
+            if img is None:
+                _LOGGER.warning("Failed to load URL %s for screen %s", source, screen_id)
+                return image_cache.get(cache_key)
+
+            pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
+            hash_key = f"{cache_key}_hash"
+            if url_pixel_hashes.get(hash_key) == pixel_hash and cache_key in image_cache:
+                _LOGGER.info("URL image unchanged for screen %s", screen_id)
+                return image_cache[cache_key]
+
+            _LOGGER.info("Converting URL image for screen %s (%dx%d, %s)", screen_id, width, height, fit)
+            data = _convert_image(img, width, height, fit)
+            image_cache[cache_key] = data
+            url_pixel_hashes[hash_key] = pixel_hash
+            _LOGGER.info("Image ready for screen %s (%d bytes)", screen_id, len(data))
+            return data
+
+        # Local file
+        if cache_key in image_cache:
+            _LOGGER.info("Serving cached image for screen %s", screen_id)
+            return image_cache[cache_key]
+
+        _LOGGER.info("Converting local image %s for screen %s (%dx%d, %s)", source, screen_id, width, height, fit)
         img = _load_image(source)
         if img is None:
-            return image_cache.get(cache_key)
-
-        pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
-        hash_key = f"{cache_key}_hash"
-        if url_pixel_hashes.get(hash_key) == pixel_hash and cache_key in image_cache:
-            return image_cache[cache_key]
+            _LOGGER.warning("Failed to load file %s for screen %s", source, screen_id)
+            return None
 
         data = _convert_image(img, width, height, fit)
         image_cache[cache_key] = data
-        url_pixel_hashes[hash_key] = pixel_hash
+        _LOGGER.info("Image ready for screen %s (%d bytes)", screen_id, len(data))
         return data
-
-    # Local file
-    if cache_key in image_cache:
-        return image_cache[cache_key]
-
-    img = _load_image(source)
-    if img is None:
+    except Exception:
+        _LOGGER.exception("Error in image_provider for screen %s", screen_id)
         return None
-
-    data = _convert_image(img, width, height, fit)
-    image_cache[cache_key] = data
-    return data
 
 
 # --- Web UI routes ---

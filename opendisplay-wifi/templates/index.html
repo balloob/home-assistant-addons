@@ -278,13 +278,13 @@
           if (a.type === "album") {
             const info = a.album_name || a.source;
             assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Album: ${esc(info)}</div>`;
-            if (a.current_source) previewSrc = resolvePreviewSrc(a.current_source);
+            if (a.current_source) previewSrc = resolveThumbSrc(a.current_source);
           } else {
             const src = a.source;
             const display = src.length > 50 ? src.substring(0, 50) + "..." : src;
             const interval = a.source_type === "url" ? ` (every ${a.poll_interval}s)` : "";
             assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Image: ${esc(display)}${interval}</div>`;
-            previewSrc = resolvePreviewSrc(src);
+            previewSrc = resolveThumbSrc(src);
           }
           const fitLabel = (a.fit || "contain") === "cover" ? "Cover" : "Contain";
           assignHtml += `<div class="text-xs text-gray-400 mt-0.5">Fit: ${fitLabel}</div>`;
@@ -360,7 +360,7 @@
         + `<div class="divide-y divide-gray-100">`
         + allUploads.map(f => `
           <div class="flex items-center gap-3 py-2">
-            <img src="${BASE}/uploads/${esc(f.name)}" class="w-10 h-10 object-cover rounded bg-gray-100" onerror="this.style.display='none'">
+            <img src="${BASE}/thumbnails/${esc(f.name)}" class="w-10 h-10 object-cover rounded bg-gray-100" onerror="this.style.display='none'">
             <span class="text-sm text-gray-700 flex-1">${esc(f.name)}</span>
           </div>`).join("")
         + `</div>`;
@@ -420,10 +420,16 @@
 
     function resolvePreviewSrc(source) {
       if (source.startsWith("http://") || source.startsWith("https://")) return source;
-      // Local file - extract filename and serve via our endpoint
       const parts = source.split("/");
       const name = parts[parts.length - 1];
       return `${BASE}/uploads/${encodeURIComponent(name)}`;
+    }
+
+    function resolveThumbSrc(source) {
+      if (source.startsWith("http://") || source.startsWith("https://")) return source;
+      const parts = source.split("/");
+      const name = parts[parts.length - 1];
+      return `${BASE}/thumbnails/${encodeURIComponent(name)}`;
     }
 
     function updatePreview() {
@@ -552,7 +558,7 @@
 
       let html = "";
       albumImages.forEach((img, i) => {
-        const src = resolvePreviewSrc(img.source);
+        const src = resolveThumbSrc(img.source);
         const isUrl = img.source.startsWith("http://") || img.source.startsWith("https://");
         const label = isUrl ? img.source : img.source.split("/").pop();
         const displayLabel = label.length > 40 ? label.substring(0, 40) + "..." : label;

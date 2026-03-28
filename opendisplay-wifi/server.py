@@ -11,7 +11,10 @@ import hashlib
 import io
 import json
 import logging
+import os
 import random
+import signal
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -21,7 +24,6 @@ from aiohttp import web
 from PIL import Image
 
 from opendisplay.wifi import DEFAULT_PORT, OpenDisplayServer
-from opendisplay.wifi.imaging import image_to_1bpp
 from opendisplay.wifi.protocol import DisplayAnnouncement
 from opendisplay.encoding.images import fit_image
 from opendisplay.models.enums import FitMode
@@ -566,7 +568,7 @@ async def handle_thumbnail(request: web.Request) -> web.Response:
 # --- Main ---
 
 
-async def run() -> None:
+async def run() -> int:
     _LOGGER.info(
         "Using %s data directory: %s",
         "add-on" if IS_ADDON else "local",
@@ -610,13 +612,60 @@ async def run() -> None:
     await site.start()
     _LOGGER.info("Web UI started on port 8099")
 
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    handled_signals: list[signal.Signals] = []
+    exit_code = 0
+
+    def _request_shutdown(sig: signal.Signals) -> None:
+        nonlocal exit_code
+        exit_code = 130 if sig is signal.SIGINT else 143
+        if shutdown_event.is_set():
+            os._exit(exit_code)
+            return
+        _LOGGER.info("Shutdown requested via %s", sig.name)
+        shutdown_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _request_shutdown, sig)
+        except (NotImplementedError, RuntimeError):
+            continue
+        handled_signals.append(sig)
+
     try:
-        while True:
-            await asyncio.sleep(3600)
+        await shutdown_event.wait()
     finally:
-        await od_server.stop()
-        await runner.cleanup()
+        try:
+            await od_server.stop()
+            await runner.cleanup()
+        finally:
+            for sig in handled_signals:
+                loop.remove_signal_handler(sig)
+    return exit_code
+
+
+def main() -> None:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    exit_code: int | None = None
+
+    try:
+        exit_code = loop.run_until_complete(run())
+    except KeyboardInterrupt:
+        exit_code = 130
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+    if exit_code is not None:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(exit_code)
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    main()

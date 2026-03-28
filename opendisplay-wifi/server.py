@@ -489,6 +489,25 @@ async def handle_api_uploads(request: web.Request) -> web.Response:
     return web.json_response(files)
 
 
+async def handle_api_upload_delete(request: web.Request) -> web.Response:
+    """Delete an uploaded file and its thumbnail."""
+    filename = request.match_info["filename"]
+    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
+    if not safe_name:
+        return web.json_response({"error": "Invalid filename"}, status=400)
+
+    path = UPLOAD_DIR / safe_name
+    if path.is_file():
+        path.unlink()
+
+    thumb_path = THUMB_DIR / (Path(safe_name).stem + ".jpg")
+    if thumb_path.is_file():
+        thumb_path.unlink()
+
+    _LOGGER.info("Deleted upload %s", safe_name)
+    return web.json_response({"ok": True})
+
+
 async def handle_upload_file(request: web.Request) -> web.Response:
     """Serve an uploaded file (for preview in the UI)."""
     filename = request.match_info["filename"]
@@ -553,6 +572,7 @@ async def run() -> None:
     app.router.add_delete("/api/albums/{album_id}", handle_api_album_delete)
     app.router.add_post("/api/upload", handle_api_upload)
     app.router.add_get("/api/uploads", handle_api_uploads)
+    app.router.add_delete("/api/uploads/{filename}", handle_api_upload_delete)
     app.router.add_get("/uploads/{filename}", handle_upload_file)
     app.router.add_get("/thumbnails/{filename}", handle_thumbnail)
 

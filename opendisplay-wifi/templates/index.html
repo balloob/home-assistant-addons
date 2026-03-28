@@ -98,6 +98,8 @@
       Powered by <a href="https://opendisplay.org" target="_blank" class="underline text-white">OpenDisplay</a>
       &middot;
       <a href="https://github.com/balloob/py-opendisplay/tree/wifi-server" target="_blank" class="underline text-white">py-opendisplay</a>
+      &middot;
+      Server by <a href="https://github.com/balloob/home-assistant-addons/tree/main/opendisplay-wifi" target="_blank" class="underline text-white">balloob</a>
     </div>
   </div>
 
@@ -362,6 +364,7 @@
           <div class="flex items-center gap-3 py-2">
             <img src="${BASE}/thumbnails/${esc(f.name)}" class="w-10 h-10 object-cover rounded bg-gray-100" onerror="this.style.display='none'">
             <span class="text-sm text-gray-700 flex-1">${esc(f.name)}</span>
+            <button onclick="deleteUpload('${esc(f.name)}')" class="text-red-400 hover:text-red-600 text-sm px-1" title="Delete">&times;</button>
           </div>`).join("")
         + `</div>`;
     }
@@ -632,6 +635,12 @@
       await fetch(`${BASE}/api/albums/${albumId}`, { method: "DELETE" });
       loadAlbums();
       loadScreens();
+    }
+
+    async function deleteUpload(name) {
+      if (!confirm(`Delete ${name}?`)) return;
+      await fetch(`${BASE}/api/uploads/${encodeURIComponent(name)}`, { method: "DELETE" });
+      loadUploads();
     }
 
     // --- Upload ---

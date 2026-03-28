@@ -11,7 +11,6 @@ import hashlib
 import io
 import json
 import logging
-import os
 import random
 import time
 import uuid
@@ -270,14 +269,8 @@ def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
 # --- Web UI routes ---
 
 
-def _ingress_path() -> str:
-    return os.environ.get("INGRESS_PATH", "")
-
-
 async def handle_index(request: web.Request) -> web.Response:
-    ingress = _ingress_path()
     template = (Path(__file__).parent / "templates" / "index.html").read_text()
-    template = template.replace("{{INGRESS_PATH}}", ingress)
     return web.Response(text=template, content_type="text/html")
 
 
@@ -513,24 +506,18 @@ async def run() -> None:
     _LOGGER.info("OpenDisplay server started on port %d", od_server.actual_port)
 
     app = web.Application(client_max_size=20 * 1024 * 1024)
-    ingress = _ingress_path()
 
-    prefixes = [""]
-    if ingress:
-        prefixes.append(ingress)
-
-    for prefix in prefixes:
-        app.router.add_get(f"{prefix}/", handle_index)
-        app.router.add_get(f"{prefix}/api/screens", handle_api_screens)
-        app.router.add_post(f"{prefix}/api/assign", handle_api_assign)
-        app.router.add_post(f"{prefix}/api/unassign", handle_api_unassign)
-        app.router.add_get(f"{prefix}/api/albums", handle_api_albums)
-        app.router.add_post(f"{prefix}/api/albums", handle_api_album_create)
-        app.router.add_put(f"{prefix}/api/albums/{{album_id}}", handle_api_album_update)
-        app.router.add_delete(f"{prefix}/api/albums/{{album_id}}", handle_api_album_delete)
-        app.router.add_post(f"{prefix}/api/upload", handle_api_upload)
-        app.router.add_get(f"{prefix}/api/uploads", handle_api_uploads)
-        app.router.add_get(f"{prefix}/uploads/{{filename}}", handle_upload_file)
+    app.router.add_get("/", handle_index)
+    app.router.add_get("/api/screens", handle_api_screens)
+    app.router.add_post("/api/assign", handle_api_assign)
+    app.router.add_post("/api/unassign", handle_api_unassign)
+    app.router.add_get("/api/albums", handle_api_albums)
+    app.router.add_post("/api/albums", handle_api_album_create)
+    app.router.add_put("/api/albums/{album_id}", handle_api_album_update)
+    app.router.add_delete("/api/albums/{album_id}", handle_api_album_delete)
+    app.router.add_post("/api/upload", handle_api_upload)
+    app.router.add_get("/api/uploads", handle_api_uploads)
+    app.router.add_get("/uploads/{filename}", handle_upload_file)
 
     runner = web.AppRunner(app)
     await runner.setup()

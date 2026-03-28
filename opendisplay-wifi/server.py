@@ -1,7 +1,7 @@
 """OpenDisplay Wi-Fi Home Assistant add-on server.
 
 Runs an OpenDisplay Wi-Fi server and provides a web UI via Ingress
-for managing connected screens and uploading images.
+for managing connected screens, albums, and uploading images.
 """
 
 from __future__ import annotations
@@ -12,7 +12,9 @@ import io
 import json
 import logging
 import os
+import random
 import time
+import uuid
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -22,6 +24,8 @@ from PIL import Image
 from opendisplay.wifi import DEFAULT_PORT, OpenDisplayServer
 from opendisplay.wifi.imaging import image_to_1bpp
 from opendisplay.wifi.protocol import DisplayAnnouncement
+from opendisplay.encoding.images import fit_image
+from opendisplay.models.enums import FitMode
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,35 +37,42 @@ DATA_DIR = Path("/data")
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ASSIGNMENTS_FILE = DATA_DIR / "assignments.json"
+ALBUMS_FILE = DATA_DIR / "albums.json"
 
-# State: tracks connected screens and their image assignments
-# Key: (width, height, colour_scheme) tuple from DisplayAnnouncement
-# Value: dict with screen info
+# Display poll interval - kept short so UI changes are reflected quickly
+DISPLAY_POLL_INTERVAL = 30
+
+# --- State ---
+
+# Connected screens: key = (width, height, colour_scheme)
 screens: dict[tuple[int, int, int], dict] = {}
 
-# Image assignments per screen key
-# Value: {"type": "file"|"url", "source": str, "poll_interval": int}
+# Assignments per screen key
+# {"type": "image"|"album", "source": str|album_id, "fit": "contain"|"cover",
+#  "poll_interval": int (for URL images only)}
 assignments: dict[tuple[int, int, int], dict] = {}
 
-# Cache of converted images per screen resolution
-image_cache: dict[tuple[int, int], bytes] = {}
-url_pixel_hashes: dict[tuple[int, int], str] = {}
+# Albums: id -> {"id", "name", "images": [{"type","source"}], "transition_interval", "shuffle"}
+albums: dict[str, dict] = {}
 
-# Track the last announcement per screen for the provider
-last_announcements: dict[tuple[int, int, int], DisplayAnnouncement] = {}
+# Album playback state per screen key (not persisted - resets on restart)
+# {"current_index": int, "last_transition": float, "order": list[int]}
+album_state: dict[tuple[int, int, int], dict] = {}
+
+# Image cache
+image_cache: dict[str, bytes] = {}
+url_pixel_hashes: dict[str, str] = {}
+
+
+# --- Persistence ---
 
 
 def _save_assignments() -> None:
-    """Persist assignments to disk so they survive restarts."""
-    serializable = {}
-    for key, value in assignments.items():
-        screen_id = _screen_id(key)
-        serializable[screen_id] = value
+    serializable = {_screen_id(k): v for k, v in assignments.items()}
     ASSIGNMENTS_FILE.write_text(json.dumps(serializable, indent=2))
 
 
 def _load_assignments() -> None:
-    """Load assignments from disk on startup."""
     if not ASSIGNMENTS_FILE.exists():
         return
     try:
@@ -75,6 +86,23 @@ def _load_assignments() -> None:
         _LOGGER.exception("Failed to load saved assignments")
 
 
+def _save_albums() -> None:
+    ALBUMS_FILE.write_text(json.dumps(albums, indent=2))
+
+
+def _load_albums() -> None:
+    if not ALBUMS_FILE.exists():
+        return
+    try:
+        albums.update(json.loads(ALBUMS_FILE.read_text()))
+        _LOGGER.info("Loaded %d saved albums", len(albums))
+    except Exception:
+        _LOGGER.exception("Failed to load saved albums")
+
+
+# --- Helpers ---
+
+
 def _screen_key(ann: DisplayAnnouncement) -> tuple[int, int, int]:
     return (ann.width, ann.height, ann.colour_scheme)
 
@@ -84,13 +112,99 @@ def _screen_id(key: tuple[int, int, int]) -> str:
 
 
 def _key_from_id(screen_id: str) -> tuple[int, int, int] | None:
-    """Parse a screen_id like '800x600_cs0' back to a key tuple."""
     try:
         dims, cs = screen_id.rsplit("_cs", 1)
         w, h = dims.split("x")
         return (int(w), int(h), int(cs))
     except (ValueError, AttributeError):
         return None
+
+
+def _is_url(source: str) -> bool:
+    return source.startswith("http://") or source.startswith("https://")
+
+
+def _load_image(source: str) -> Image.Image | None:
+    """Load an image from a file path or URL."""
+    if _is_url(source):
+        try:
+            raw = urlopen(source, timeout=30).read()  # noqa: S310
+            return Image.open(io.BytesIO(raw))
+        except Exception:
+            _LOGGER.exception("Failed to fetch URL: %s", source)
+            return None
+    else:
+        try:
+            return Image.open(source)
+        except Exception:
+            _LOGGER.exception("Failed to load file: %s", source)
+            return None
+
+
+def _convert_image(img: Image.Image, width: int, height: int, fit: str) -> bytes:
+    """Convert a PIL image to 1bpp with the given fit mode."""
+    fit_mode = FitMode.COVER if fit == "cover" else FitMode.CONTAIN
+    fitted = fit_image(img, (width, height), fit_mode)
+
+    from epaper_dithering import MONO_4_26, DitherMode, dither_image
+    dithered = dither_image(fitted, MONO_4_26, mode=DitherMode.FLOYD_STEINBERG)
+    return dithered.convert("1").tobytes("raw", "1")
+
+
+def _get_album_current_image(key: tuple[int, int, int], album: dict) -> dict | None:
+    """Get the current image entry from an album for a screen, advancing if needed."""
+    images = album.get("images", [])
+    if not images:
+        return None
+
+    now = time.time()
+    state = album_state.get(key)
+
+    if state is None:
+        # Initialize playback
+        order = list(range(len(images)))
+        if album.get("shuffle"):
+            random.shuffle(order)
+        album_state[key] = {
+            "current_index": 0,
+            "last_transition": now,
+            "order": order,
+        }
+        state = album_state[key]
+
+    # Check if it's time to transition
+    interval = album.get("transition_interval", 60)
+    elapsed = now - state["last_transition"]
+    if elapsed >= interval and len(images) > 1:
+        steps = int(elapsed // interval)
+        state["current_index"] = (state["current_index"] + steps) % len(images)
+        state["last_transition"] = now
+
+        # Re-shuffle when we wrap around
+        if album.get("shuffle") and state["current_index"] < steps:
+            order = list(range(len(images)))
+            random.shuffle(order)
+            state["order"] = order
+
+    idx = state["order"][state["current_index"] % len(state["order"])]
+    return images[idx] if idx < len(images) else images[0]
+
+
+def _resolve_source(assignment: dict, key: tuple[int, int, int]) -> tuple[str, str] | None:
+    """Resolve an assignment to (source_path_or_url, source_type).
+
+    Returns None if nothing to show.
+    """
+    if assignment["type"] == "album":
+        album = albums.get(assignment["source"])
+        if album is None:
+            return None
+        entry = _get_album_current_image(key, album)
+        if entry is None:
+            return None
+        return (entry["source"], entry["type"])
+    else:
+        return (assignment["source"], assignment.get("source_type", "file"))
 
 
 def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
@@ -110,64 +224,57 @@ def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
             "firmware_version": announcement.firmware_version,
         }
     screens[key]["last_seen"] = time.time()
-    last_announcements[key] = announcement
 
     assignment = assignments.get(key)
     if assignment is None:
         return None
 
+    resolved = _resolve_source(assignment, key)
+    if resolved is None:
+        return None
+
+    source, source_type = resolved
     width = announcement.width
     height = announcement.height
-    res_key = (width, height)
+    fit = assignment.get("fit", "contain")
+    cache_key = f"{source}_{width}x{height}_{fit}"
 
-    source = assignment["source"]
-    source_type = assignment["type"]
+    if source_type == "url" or _is_url(source):
+        img = _load_image(source)
+        if img is None:
+            return image_cache.get(cache_key)
 
-    if source_type == "url":
-        try:
-            _LOGGER.info("Fetching URL: %s", source)
-            raw = urlopen(source, timeout=30).read()  # noqa: S310
-            img = Image.open(io.BytesIO(raw))
-            pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
+        pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
+        hash_key = f"{cache_key}_hash"
+        if url_pixel_hashes.get(hash_key) == pixel_hash and cache_key in image_cache:
+            return image_cache[cache_key]
 
-            if url_pixel_hashes.get(res_key) == pixel_hash:
-                return image_cache.get(res_key)
-
-            data = image_to_1bpp(img, width, height)
-            image_cache[res_key] = data
-            url_pixel_hashes[res_key] = pixel_hash
-            return data
-        except Exception:
-            _LOGGER.exception("Failed to fetch URL: %s", source)
-            return image_cache.get(res_key)
+        data = _convert_image(img, width, height, fit)
+        image_cache[cache_key] = data
+        url_pixel_hashes[hash_key] = pixel_hash
+        return data
 
     # Local file
-    try:
-        cache_key_str = f"{source}_{width}x{height}"
-        cache_hash = hashlib.sha256(cache_key_str.encode()).hexdigest()[:16]
-        if cache_hash in image_cache:
-            return image_cache[cache_hash]
+    if cache_key in image_cache:
+        return image_cache[cache_key]
 
-        img = Image.open(source)
-        data = image_to_1bpp(img, width, height)
-        image_cache[cache_hash] = data
-        return data
-    except Exception:
-        _LOGGER.exception("Failed to load file: %s", source)
+    img = _load_image(source)
+    if img is None:
         return None
+
+    data = _convert_image(img, width, height, fit)
+    image_cache[cache_key] = data
+    return data
 
 
 # --- Web UI routes ---
 
 
 def _ingress_path() -> str:
-    """Get the ingress path prefix from environment."""
-    # Home Assistant sets this for ingress-enabled add-ons
     return os.environ.get("INGRESS_PATH", "")
 
 
 async def handle_index(request: web.Request) -> web.Response:
-    """Serve the main UI page."""
     ingress = _ingress_path()
     template = (Path(__file__).parent / "templates" / "index.html").read_text()
     template = template.replace("{{INGRESS_PATH}}", ingress)
@@ -175,12 +282,22 @@ async def handle_index(request: web.Request) -> web.Response:
 
 
 async def handle_api_screens(request: web.Request) -> web.Response:
-    """Return list of connected screens and their assignments."""
     now = time.time()
     result = []
     for key, info in screens.items():
         screen_id = _screen_id(key)
         assignment = assignments.get(key)
+        entry = None
+        if assignment:
+            entry = dict(assignment)
+            # For album assignments, include current image info
+            if assignment["type"] == "album":
+                album = albums.get(assignment["source"])
+                if album:
+                    entry["album_name"] = album["name"]
+                    current = _get_album_current_image(key, album)
+                    if current:
+                        entry["current_source"] = current["source"]
         result.append({
             "id": screen_id,
             "width": info["width"],
@@ -189,74 +306,157 @@ async def handle_api_screens(request: web.Request) -> web.Response:
             "firmware_id": info.get("firmware_id", 0),
             "firmware_version": info.get("firmware_version", 0),
             "last_seen_seconds_ago": round(now - info.get("last_seen", now)),
-            "assignment": assignment,
+            "assignment": entry,
         })
     return web.json_response(result)
 
 
 async def handle_api_assign(request: web.Request) -> web.Response:
-    """Assign an image to a screen."""
     data = await request.json()
     screen_id = data.get("screen_id")
+    assign_type = data.get("type", "image")  # "image" or "album"
     source = data.get("source", "").strip()
+    fit = data.get("fit", "contain")
     poll_interval = data.get("poll_interval", 5)
 
     if not screen_id or not source:
-        return web.json_response({"error": "screen_id and source are required"}, status=400)
+        return web.json_response({"error": "screen_id and source required"}, status=400)
 
     key = _key_from_id(screen_id)
     if key is None:
         return web.json_response({"error": "Invalid screen_id"}, status=400)
 
-    is_url = source.startswith("http://") or source.startswith("https://")
+    if fit not in ("contain", "cover"):
+        fit = "contain"
 
-    assignments[key] = {
-        "type": "url" if is_url else "file",
-        "source": source,
-        "poll_interval": int(poll_interval),
-    }
+    if assign_type == "album":
+        if source not in albums:
+            return web.json_response({"error": "Album not found"}, status=404)
+        assignments[key] = {"type": "album", "source": source, "fit": fit}
+        # Reset album playback state for this screen
+        album_state.pop(key, None)
+    else:
+        is_url = _is_url(source)
+        assignments[key] = {
+            "type": "image",
+            "source": source,
+            "source_type": "url" if is_url else "file",
+            "fit": fit,
+            "poll_interval": int(poll_interval),
+        }
 
-    # Clear caches for this resolution so new image is picked up
-    res_key = (key[0], key[1])
-    image_cache.pop(res_key, None)
-    url_pixel_hashes.pop(res_key, None)
-    # Also clear file cache entries
-    cache_key_str = f"{source}_{key[0]}x{key[1]}"
-    cache_hash = hashlib.sha256(cache_key_str.encode()).hexdigest()[:16]
-    image_cache.pop(cache_hash, None)
+    # Clear image caches for this screen
+    width, height = key[0], key[1]
+    to_remove = [k for k in image_cache if f"_{width}x{height}_" in k]
+    for k in to_remove:
+        image_cache.pop(k, None)
+        url_pixel_hashes.pop(f"{k}_hash", None)
 
     _save_assignments()
-    _LOGGER.info("Assigned %s to screen %s", source, screen_id)
+    _LOGGER.info("Assigned %s (%s) to screen %s [fit=%s]", source, assign_type, screen_id, fit)
     return web.json_response({"ok": True})
 
 
 async def handle_api_unassign(request: web.Request) -> web.Response:
-    """Remove image assignment from a screen."""
     data = await request.json()
     screen_id = data.get("screen_id")
     if not screen_id:
-        return web.json_response({"error": "screen_id is required"}, status=400)
+        return web.json_response({"error": "screen_id required"}, status=400)
 
     key = _key_from_id(screen_id)
     if key is None:
         return web.json_response({"error": "Invalid screen_id"}, status=400)
 
     assignments.pop(key, None)
+    album_state.pop(key, None)
     _save_assignments()
-    _LOGGER.info("Unassigned screen %s", screen_id)
     return web.json_response({"ok": True})
 
 
+# --- Album API ---
+
+
+async def handle_api_albums(request: web.Request) -> web.Response:
+    return web.json_response(list(albums.values()))
+
+
+async def handle_api_album_create(request: web.Request) -> web.Response:
+    data = await request.json()
+    name = data.get("name", "").strip()
+    if not name:
+        return web.json_response({"error": "name required"}, status=400)
+
+    album_id = str(uuid.uuid4())[:8]
+    albums[album_id] = {
+        "id": album_id,
+        "name": name,
+        "images": data.get("images", []),
+        "transition_interval": int(data.get("transition_interval", 60)),
+        "shuffle": bool(data.get("shuffle", False)),
+    }
+    _save_albums()
+    return web.json_response(albums[album_id])
+
+
+async def handle_api_album_update(request: web.Request) -> web.Response:
+    album_id = request.match_info["album_id"]
+    if album_id not in albums:
+        return web.json_response({"error": "Not found"}, status=404)
+
+    data = await request.json()
+    album = albums[album_id]
+    if "name" in data:
+        album["name"] = data["name"]
+    if "images" in data:
+        album["images"] = data["images"]
+    if "transition_interval" in data:
+        album["transition_interval"] = int(data["transition_interval"])
+    if "shuffle" in data:
+        album["shuffle"] = bool(data["shuffle"])
+
+    # Reset playback state for any screen showing this album
+    for key, assignment in assignments.items():
+        if assignment.get("type") == "album" and assignment.get("source") == album_id:
+            album_state.pop(key, None)
+            # Clear image caches
+            width, height = key[0], key[1]
+            to_remove = [k for k in image_cache if f"_{width}x{height}_" in k]
+            for k in to_remove:
+                image_cache.pop(k, None)
+
+    _save_albums()
+    return web.json_response(album)
+
+
+async def handle_api_album_delete(request: web.Request) -> web.Response:
+    album_id = request.match_info["album_id"]
+    if album_id not in albums:
+        return web.json_response({"error": "Not found"}, status=404)
+
+    # Unassign from any screens using this album
+    to_remove = [k for k, v in assignments.items()
+                 if v.get("type") == "album" and v.get("source") == album_id]
+    for key in to_remove:
+        assignments.pop(key, None)
+        album_state.pop(key, None)
+
+    del albums[album_id]
+    _save_albums()
+    _save_assignments()
+    return web.json_response({"ok": True})
+
+
+# --- Upload / file serving ---
+
+
 async def handle_api_upload(request: web.Request) -> web.Response:
-    """Handle image file upload."""
     reader = await request.multipart()
     field = await reader.next()
 
     if field is None or field.name != "image":
-        return web.json_response({"error": "No image field in upload"}, status=400)
+        return web.json_response({"error": "No image field"}, status=400)
 
     filename = field.filename or "upload.png"
-    # Sanitize filename
     safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
     if not safe_name:
         safe_name = "upload.png"
@@ -272,11 +472,10 @@ async def handle_api_upload(request: web.Request) -> web.Response:
             f.write(chunk)
 
     _LOGGER.info("Uploaded %s (%d bytes)", safe_name, size)
-    return web.json_response({"ok": True, "path": str(dest)})
+    return web.json_response({"ok": True, "path": str(dest), "name": safe_name})
 
 
 async def handle_api_uploads(request: web.Request) -> web.Response:
-    """List uploaded files."""
     files = []
     if UPLOAD_DIR.exists():
         for p in sorted(UPLOAD_DIR.iterdir()):
@@ -285,45 +484,59 @@ async def handle_api_uploads(request: web.Request) -> web.Response:
     return web.json_response(files)
 
 
+async def handle_upload_file(request: web.Request) -> web.Response:
+    """Serve an uploaded file (for preview in the UI)."""
+    filename = request.match_info["filename"]
+    safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
+    path = UPLOAD_DIR / safe_name
+    if not path.is_file():
+        return web.Response(status=404)
+    return web.FileResponse(path)
+
+
+# --- Main ---
+
+
 async def run() -> None:
-    """Start the OpenDisplay server and web UI."""
-    # Read add-on options
     options_path = Path("/data/options.json")
     if options_path.exists():
         options = json.loads(options_path.read_text())
     else:
         options = {}
 
+    _load_albums()
     _load_assignments()
 
-    poll_interval = options.get("poll_interval", 300)
     od_port = options.get("opendisplay_port", DEFAULT_PORT)
 
-    # Start OpenDisplay WiFi server
     od_server = OpenDisplayServer(
         port=od_port,
         image_provider=image_provider,
-        poll_interval=poll_interval,
+        poll_interval=DISPLAY_POLL_INTERVAL,
         mdns=True,
     )
     await od_server.start()
     _LOGGER.info("OpenDisplay server started on port %d", od_server.actual_port)
 
-    # Set up web UI
-    app = web.Application()
+    app = web.Application(client_max_size=20 * 1024 * 1024)
     ingress = _ingress_path()
 
-    # Register routes with and without ingress prefix
     prefixes = [""]
     if ingress:
         prefixes.append(ingress)
+
     for prefix in prefixes:
         app.router.add_get(f"{prefix}/", handle_index)
         app.router.add_get(f"{prefix}/api/screens", handle_api_screens)
         app.router.add_post(f"{prefix}/api/assign", handle_api_assign)
         app.router.add_post(f"{prefix}/api/unassign", handle_api_unassign)
+        app.router.add_get(f"{prefix}/api/albums", handle_api_albums)
+        app.router.add_post(f"{prefix}/api/albums", handle_api_album_create)
+        app.router.add_put(f"{prefix}/api/albums/{{album_id}}", handle_api_album_update)
+        app.router.add_delete(f"{prefix}/api/albums/{{album_id}}", handle_api_album_delete)
         app.router.add_post(f"{prefix}/api/upload", handle_api_upload)
         app.router.add_get(f"{prefix}/api/uploads", handle_api_uploads)
+        app.router.add_get(f"{prefix}/uploads/{{filename}}", handle_upload_file)
 
     runner = web.AppRunner(app)
     await runner.setup()

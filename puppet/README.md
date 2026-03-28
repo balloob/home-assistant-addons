@@ -73,6 +73,8 @@ You can set the theme of the Home Assistant interface for the screenshot by addi
 http://homeassistant.local:10000/home?viewport=1000x1000&theme=Graphite%20E-ink%20Light
 ```
 
+**Note:** Theme changes apply to all sessions of the user whose token is used. To avoid having your normal browsing sessions affected by screenshot themes (e.g., e-ink themes), create a separate user account specifically for Puppet and use that user's long-lived access token in the addon configuration.
+
 ### Finish loading detection
 
 By default, on a cold start the server will wait for 2.5 extra seconds after the loading is considered done, to give things that are not tracked by loading spinners to load (ie icons, pictures). When the browser is active, it waits 750ms. You can control this wait time by adding a `wait` query parameter. For example, to wait 10 seconds:

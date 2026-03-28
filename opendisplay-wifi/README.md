@@ -2,6 +2,8 @@
 
 > **Experimental** - This add-on is a work in progress.
 
+[![Open your Home Assistant instance and show the dashboard of an add-on.](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=0f1cc410_opendisplay-wifi&repository_url=https%3A%2F%2Fgithub.com%2Fballoob%2Fhome-assistant-addons)
+
 Run an [OpenDisplay](https://opendisplay.org) Wi-Fi server as a Home Assistant add-on. E-paper displays on your network will automatically discover the server via mDNS and connect to receive images.
 
 This add-on uses a source install of the [`wifi-server` branch of py-opendisplay](https://github.com/balloob/py-opendisplay/tree/wifi-server).

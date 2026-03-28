@@ -73,7 +73,7 @@ You can set the theme of the Home Assistant interface for the screenshot by addi
 http://homeassistant.local:10000/home?viewport=1000x1000&theme=Graphite%20E-ink%20Light
 ```
 
-**Note:** Starting with Home Assistant 2026.2.0, theme changes apply to all sessions of the user whose token is used. To avoid having your normal browsing sessions affected by screenshot themes (e.g., e-ink themes), create a separate user account specifically for Puppet and use that user's long-lived access token in the addon configuration.
+**Note:** Theme changes apply to all sessions of the user whose token is used. To avoid having your normal browsing sessions affected by screenshot themes (e.g., e-ink themes), create a separate user account specifically for Puppet and use that user's long-lived access token in the addon configuration.
 
 ### Finish loading detection
 

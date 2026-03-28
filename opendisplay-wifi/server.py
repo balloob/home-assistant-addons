@@ -450,28 +450,22 @@ async def handle_api_album_delete(request: web.Request) -> web.Response:
 
 
 async def handle_api_upload(request: web.Request) -> web.Response:
-    reader = await request.multipart()
-    field = await reader.next()
+    post = await request.post()
+    image = post.get("image")
 
-    if field is None or field.name != "image":
+    if image is None or not hasattr(image, "file"):
         return web.json_response({"error": "No image field"}, status=400)
 
-    filename = field.filename or "upload.png"
+    filename = image.filename or "upload.png"
     safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
     if not safe_name:
         safe_name = "upload.png"
 
     dest = UPLOAD_DIR / safe_name
-    size = 0
-    with open(dest, "wb") as f:
-        while True:
-            chunk = await field.read_chunk()
-            if not chunk:
-                break
-            size += len(chunk)
-            f.write(chunk)
+    content = image.file.read()
+    dest.write_bytes(content)
 
-    _LOGGER.info("Uploaded %s (%d bytes)", safe_name, size)
+    _LOGGER.info("Uploaded %s (%d bytes)", safe_name, len(content))
     return web.json_response({"ok": True, "path": str(dest), "name": safe_name})
 
 

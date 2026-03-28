@@ -32,7 +32,34 @@ logging.basicConfig(
 )
 _LOGGER = logging.getLogger(__name__)
 
-DATA_DIR = Path("/data")
+LOCAL_DATA_DIR = Path.cwd() / "dev-data"
+ADDON_DATA_DIR = Path("/data")
+LOCAL_OPTIONS_FILE = LOCAL_DATA_DIR / "options-dev.json"
+ADDON_OPTIONS_FILE = ADDON_DATA_DIR / "options.json"
+OPTIONS_FILE = next(
+    (path for path in (LOCAL_OPTIONS_FILE, ADDON_OPTIONS_FILE) if path.exists()),
+    None,
+)
+
+
+def _load_options() -> dict:
+    """Load the selected options file, defaulting to empty options."""
+    if OPTIONS_FILE is None:
+        _LOGGER.info("No options file found, using defaults")
+        return {}
+
+    _LOGGER.info("Loading options from %s", OPTIONS_FILE)
+
+    try:
+        raw = OPTIONS_FILE.read_text().strip()
+        return json.loads(raw) if raw else {}
+    except Exception:
+        _LOGGER.exception("Failed to load options from %s, using defaults", OPTIONS_FILE)
+        return {}
+
+
+IS_ADDON = OPTIONS_FILE == ADDON_OPTIONS_FILE
+DATA_DIR = ADDON_DATA_DIR if IS_ADDON else LOCAL_DATA_DIR
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 THUMB_DIR = DATA_DIR / "thumbnails"
@@ -540,11 +567,12 @@ async def handle_thumbnail(request: web.Request) -> web.Response:
 
 
 async def run() -> None:
-    options_path = Path("/data/options.json")
-    if options_path.exists():
-        options = json.loads(options_path.read_text())
-    else:
-        options = {}
+    _LOGGER.info(
+        "Using %s data directory: %s",
+        "add-on" if IS_ADDON else "local",
+        DATA_DIR,
+    )
+    options = _load_options()
 
     _load_albums()
     _load_assignments()

@@ -34,6 +34,27 @@ Then install the **OpenDisplay Wi-Fi** add-on.
 3. Power on your OpenDisplay e-paper screens - they will appear in the UI once connected
 4. Upload an image or provide a URL and assign it to a screen
 
+## Local development
+
+You can also run the server outside Home Assistant:
+
+```bash
+cd opendisplay-wifi
+mkdir -p dev-data
+uv sync
+uv run python server.py
+```
+
+When run locally, the server stores its data and config in `./dev-data`:
+
+- `dev-data/assignments.json`
+- `dev-data/albums.json`
+- `dev-data/uploads/`
+- `dev-data/thumbnails/`
+- optional `dev-data/options-dev.json`
+
+Inside the Home Assistant add-on, it continues using `/data` instead.
+
 ## Links
 
 - [OpenDisplay](https://opendisplay.org)

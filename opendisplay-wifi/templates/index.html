@@ -4,142 +4,129 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenDisplay Wi-Fi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ha-blue: #03a9f4;
+      --ha-blue-dark: #0288d1;
+      --ha-blue-light: #4fc3f7;
+    }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f5f5f5; color: #333; padding: 24px; max-width: 960px; margin: 0 auto;
+      background: linear-gradient(135deg, #03a9f4 0%, #0288d1 100%);
+      min-height: 100vh;
     }
-    h1 { font-size: 1.5rem; margin-bottom: 4px; }
-    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 24px; }
-    .subtitle a { color: #4a90d9; text-decoration: none; }
-    .subtitle a:hover { text-decoration: underline; }
-    h2 { font-size: 1.1rem; margin-bottom: 12px; color: #555; }
-    .card {
-      background: #fff; border-radius: 8px; padding: 20px;
-      margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    .colour-scheme {
+      display: inline-block; padding: 2px 8px; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 500;
+      background: #e0f2fe; color: #0369a1;
     }
-    .empty { color: #999; font-style: italic; padding: 12px 0; }
-    .screen {
-      display: flex; justify-content: space-between; align-items: flex-start;
-      padding: 12px 0; border-bottom: 1px solid #eee;
-    }
-    .screen:last-child { border-bottom: none; }
-    .screen-info { flex: 1; }
-    .screen-info strong { font-size: 1rem; }
-    .screen-meta { color: #888; font-size: 0.85rem; margin-top: 4px; }
-    .screen-assignment { color: #4a90d9; font-size: 0.85rem; margin-top: 4px; }
-    .screen-actions { display: flex; gap: 8px; align-items: flex-start; margin-left: 12px; }
-    button {
-      background: #4a90d9; color: #fff; border: none; border-radius: 6px;
-      padding: 8px 16px; cursor: pointer; font-size: 0.85rem;
-    }
-    button:hover { background: #3a7bc8; }
-    button.danger { background: #d94a4a; }
-    button.danger:hover { background: #c83a3a; }
-    button.secondary { background: #888; }
-    button.secondary:hover { background: #777; }
-    .form-group { margin-bottom: 12px; }
-    .form-group label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 4px; }
-    input[type="text"], input[type="number"], input[type="file"], select {
-      width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
-      font-size: 0.9rem;
-    }
-    input[type="file"] { padding: 6px; }
-    .tabs { display: flex; gap: 0; margin-bottom: 16px; }
-    .tab {
-      padding: 8px 20px; cursor: pointer; border: 1px solid #ddd;
-      background: #f5f5f5; font-size: 0.85rem; color: #666;
-    }
-    .tab:first-child { border-radius: 6px 0 0 6px; }
-    .tab:last-child { border-radius: 0 6px 6px 0; }
-    .tab.active { background: #4a90d9; color: #fff; border-color: #4a90d9; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    .poll-field { display: none; }
-    .poll-field.visible { display: block; }
-    .uploaded-files { margin-top: 8px; }
-    .uploaded-file {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 6px 0; font-size: 0.85rem; border-bottom: 1px solid #f0f0f0;
-    }
-    .uploaded-file:last-child { border-bottom: none; }
-    .colour-scheme { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: #e8e8e8; }
     #modal-overlay {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
       z-index: 100; justify-content: center; align-items: center;
     }
     #modal-overlay.open { display: flex; }
-    #modal { background: #fff; border-radius: 12px; padding: 24px; width: 90%; max-width: 480px; }
-    #modal h2 { margin-bottom: 16px; }
-    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-    .refresh-btn {
-      background: none; border: 1px solid #ddd; color: #666; border-radius: 6px;
-      padding: 6px 12px; font-size: 0.8rem;
-    }
-    .refresh-btn:hover { background: #f0f0f0; color: #333; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-    .header-left { flex: 1; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
   </style>
 </head>
-<body>
-  <div class="header">
-    <div class="header-left">
-      <h1>OpenDisplay Wi-Fi</h1>
-      <div class="subtitle">
-        Manage your <a href="https://opendisplay.org" target="_blank">OpenDisplay</a> e-paper screens
+<body class="p-4">
+  <div class="container mx-auto max-w-3xl">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-white">OpenDisplay Wi-Fi</h1>
+        <p class="text-blue-100 text-sm mt-1">
+          Manage your <a href="https://opendisplay.org" target="_blank" class="underline text-white hover:text-blue-200">OpenDisplay</a> e-paper screens
+        </p>
       </div>
+      <button onclick="loadScreens()" class="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm transition duration-200">
+        Refresh
+      </button>
     </div>
-    <button class="refresh-btn" onclick="loadScreens()">Refresh</button>
+
+    <!-- Connected Screens -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)">Connected Screens</h2>
+      <div id="no-screens" class="text-gray-400 italic py-4">Waiting for screens to connect...</div>
+      <div id="screens-list" class="divide-y divide-gray-100"></div>
+    </div>
+
+    <!-- Upload Image -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)">Upload Image</h2>
+      <form id="upload-form" class="space-y-3">
+        <div>
+          <label for="upload-file" class="block text-sm font-medium text-gray-700 mb-1">Select an image file</label>
+          <input type="file" id="upload-file" name="image" accept="image/*"
+            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent text-sm"
+            style="border-color: var(--ha-blue-light)">
+        </div>
+        <button type="submit"
+          class="px-4 py-2 rounded-md text-white text-sm font-medium transition duration-200"
+          style="background: var(--ha-blue)" onmouseover="this.style.background='var(--ha-blue-dark)'" onmouseout="this.style.background='var(--ha-blue)'">
+          Upload
+        </button>
+      </form>
+      <div id="uploaded-files" class="mt-4"></div>
+    </div>
+
+    <!-- Attribution -->
+    <div class="text-center text-blue-100 text-xs py-4">
+      Powered by <a href="https://opendisplay.org" target="_blank" class="underline text-white">OpenDisplay</a>
+      &middot;
+      <a href="https://github.com/balloob/py-opendisplay/tree/wifi-server" target="_blank" class="underline text-white">py-opendisplay</a>
+    </div>
   </div>
 
-  <h2>Connected Screens</h2>
-  <div class="card" id="screens-card">
-    <div class="empty" id="no-screens">Waiting for screens to connect...</div>
-    <div id="screens-list"></div>
-  </div>
-
-  <h2>Upload Image</h2>
-  <div class="card">
-    <form id="upload-form">
-      <div class="form-group">
-        <label for="upload-file">Select an image file</label>
-        <input type="file" id="upload-file" name="image" accept="image/*">
-      </div>
-      <button type="submit">Upload</button>
-    </form>
-    <div class="uploaded-files" id="uploaded-files"></div>
-  </div>
-
+  <!-- Assign Modal -->
   <div id="modal-overlay">
-    <div id="modal">
-      <h2>Assign Image to <span id="modal-screen-name"></span></h2>
-      <div class="tabs">
-        <div class="tab active" data-tab="url" onclick="switchTab('url')">URL</div>
-        <div class="tab" data-tab="file" onclick="switchTab('file')">Uploaded File</div>
+    <div id="modal" class="bg-white rounded-xl shadow-2xl p-6 w-[90%] max-w-md">
+      <h2 class="text-lg font-semibold mb-4" style="color: var(--ha-blue-dark)">
+        Assign Image to <span id="modal-screen-name"></span>
+      </h2>
+
+      <div class="flex mb-4 rounded-lg overflow-hidden border" style="border-color: var(--ha-blue-light)">
+        <button class="tab flex-1 py-2 text-sm font-medium transition duration-200 text-white"
+          data-tab="url" onclick="switchTab('url')" style="background: var(--ha-blue)">URL</button>
+        <button class="tab flex-1 py-2 text-sm font-medium transition duration-200 text-gray-600 bg-gray-50"
+          data-tab="file" onclick="switchTab('file')">Uploaded File</button>
       </div>
 
       <div class="tab-content active" id="tab-url">
-        <div class="form-group">
-          <label for="assign-url">Image URL</label>
-          <input type="text" id="assign-url" placeholder="https://example.com/image.png">
+        <div class="mb-3">
+          <label for="assign-url" class="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+          <input type="text" id="assign-url" placeholder="https://example.com/image.png"
+            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent text-sm"
+            style="border-color: var(--ha-blue-light)">
         </div>
-        <div class="form-group poll-field visible" id="poll-interval-group">
-          <label for="assign-poll">Update interval (seconds)</label>
-          <input type="number" id="assign-poll" value="300" min="10">
+        <div class="mb-3" id="poll-interval-group">
+          <label for="assign-poll" class="block text-sm font-medium text-gray-700 mb-1">Update interval (seconds)</label>
+          <input type="number" id="assign-poll" value="300" min="10"
+            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent text-sm"
+            style="border-color: var(--ha-blue-light)">
         </div>
       </div>
 
       <div class="tab-content" id="tab-file">
-        <div class="form-group">
-          <label for="assign-file">Select uploaded file</label>
-          <select id="assign-file"></select>
+        <div class="mb-3">
+          <label for="assign-file" class="block text-sm font-medium text-gray-700 mb-1">Select uploaded file</label>
+          <select id="assign-file"
+            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:border-transparent text-sm"
+            style="border-color: var(--ha-blue-light)"></select>
         </div>
       </div>
 
-      <div class="modal-actions">
-        <button class="secondary" onclick="closeModal()">Cancel</button>
-        <button onclick="submitAssignment()">Assign</button>
+      <div class="flex gap-2 justify-end mt-4">
+        <button onclick="closeModal()"
+          class="px-4 py-2 rounded-md text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition duration-200">
+          Cancel
+        </button>
+        <button onclick="submitAssignment()"
+          class="px-4 py-2 rounded-md text-sm font-medium text-white transition duration-200"
+          style="background: var(--ha-blue)" onmouseover="this.style.background='var(--ha-blue-dark)'" onmouseout="this.style.background='var(--ha-blue)'">
+          Assign
+        </button>
       </div>
     </div>
   </div>
@@ -175,21 +162,31 @@
             const interval = s.assignment.type === "url"
               ? ` (every ${s.assignment.poll_interval}s)`
               : "";
-            assignHtml = `<div class="screen-assignment">Showing: ${escHtml(display)}${interval}</div>`;
+            assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Showing: ${escHtml(display)}${interval}</div>`;
           }
           return `
-            <div class="screen">
-              <div class="screen-info">
-                <strong>${s.width} x ${s.height}</strong>
-                <span class="colour-scheme">${cs}</span>
-                <div class="screen-meta">
+            <div class="flex items-start justify-between py-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-gray-800">${s.width} x ${s.height}</span>
+                  <span class="colour-scheme">${cs}</span>
+                </div>
+                <div class="text-xs text-gray-400 mt-1">
                   FW ${s.firmware_id}.${s.firmware_version} &middot; Last seen ${seenAgo}
                 </div>
                 ${assignHtml}
               </div>
-              <div class="screen-actions">
-                <button onclick="openAssign('${s.id}', '${s.width}x${s.height}')">Assign Image</button>
-                ${s.assignment ? `<button class="danger" onclick="unassign('${s.id}')">Clear</button>` : ""}
+              <div class="flex gap-2 ml-3 flex-shrink-0">
+                <button onclick="openAssign('${s.id}', '${s.width}x${s.height}')"
+                  class="px-3 py-1.5 rounded-md text-white text-sm font-medium transition duration-200"
+                  style="background: var(--ha-blue)" onmouseover="this.style.background='var(--ha-blue-dark)'" onmouseout="this.style.background='var(--ha-blue)'">
+                  Assign Image
+                </button>
+                ${s.assignment ? `
+                  <button onclick="unassign('${s.id}')"
+                    class="px-3 py-1.5 rounded-md text-white text-sm font-medium bg-red-500 hover:bg-red-600 transition duration-200">
+                    Clear
+                  </button>` : ""}
               </div>
             </div>
           `;
@@ -212,7 +209,11 @@
 
     function switchTab(tab) {
       currentTab = tab;
-      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+      document.querySelectorAll(".tab").forEach(t => {
+        const isActive = t.dataset.tab === tab;
+        t.style.background = isActive ? "var(--ha-blue)" : "#f9fafb";
+        t.className = `tab flex-1 py-2 text-sm font-medium transition duration-200 ${isActive ? "text-white" : "text-gray-600 bg-gray-50"}`;
+      });
       document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
       document.getElementById(`tab-${tab}`).classList.add("active");
     }
@@ -311,8 +312,10 @@
         if (files.length === 0) {
           container.innerHTML = "";
         } else {
-          container.innerHTML = "<strong style='font-size:0.85rem;color:#666;'>Uploaded files:</strong>"
-            + files.map(f => `<div class="uploaded-file"><span>${escHtml(f.name)}</span></div>`).join("");
+          container.innerHTML = `<p class="text-sm font-medium text-gray-500 mb-2">Uploaded files</p>`
+            + `<div class="divide-y divide-gray-100">`
+            + files.map(f => `<div class="py-2 text-sm text-gray-700">${escHtml(f.name)}</div>`).join("")
+            + `</div>`;
         }
       } catch (e) {
         console.error("Failed to load uploads:", e);

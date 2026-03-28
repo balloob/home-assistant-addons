@@ -29,8 +29,10 @@ logging.basicConfig(
 )
 _LOGGER = logging.getLogger(__name__)
 
-UPLOAD_DIR = Path("/data/uploads")
+DATA_DIR = Path("/data")
+UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ASSIGNMENTS_FILE = DATA_DIR / "assignments.json"
 
 # State: tracks connected screens and their image assignments
 # Key: (width, height, colour_scheme) tuple from DisplayAnnouncement
@@ -47,6 +49,30 @@ url_pixel_hashes: dict[tuple[int, int], str] = {}
 
 # Track the last announcement per screen for the provider
 last_announcements: dict[tuple[int, int, int], DisplayAnnouncement] = {}
+
+
+def _save_assignments() -> None:
+    """Persist assignments to disk so they survive restarts."""
+    serializable = {}
+    for key, value in assignments.items():
+        screen_id = _screen_id(key)
+        serializable[screen_id] = value
+    ASSIGNMENTS_FILE.write_text(json.dumps(serializable, indent=2))
+
+
+def _load_assignments() -> None:
+    """Load assignments from disk on startup."""
+    if not ASSIGNMENTS_FILE.exists():
+        return
+    try:
+        data = json.loads(ASSIGNMENTS_FILE.read_text())
+        for screen_id, value in data.items():
+            key = _key_from_id(screen_id)
+            if key is not None:
+                assignments[key] = value
+        _LOGGER.info("Loaded %d saved assignments", len(assignments))
+    except Exception:
+        _LOGGER.exception("Failed to load saved assignments")
 
 
 def _screen_key(ann: DisplayAnnouncement) -> tuple[int, int, int]:
@@ -199,6 +225,7 @@ async def handle_api_assign(request: web.Request) -> web.Response:
     cache_hash = hashlib.sha256(cache_key_str.encode()).hexdigest()[:16]
     image_cache.pop(cache_hash, None)
 
+    _save_assignments()
     _LOGGER.info("Assigned %s to screen %s", source, screen_id)
     return web.json_response({"ok": True})
 
@@ -215,6 +242,7 @@ async def handle_api_unassign(request: web.Request) -> web.Response:
         return web.json_response({"error": "Invalid screen_id"}, status=400)
 
     assignments.pop(key, None)
+    _save_assignments()
     _LOGGER.info("Unassigned screen %s", screen_id)
     return web.json_response({"ok": True})
 
@@ -265,6 +293,8 @@ async def run() -> None:
         options = json.loads(options_path.read_text())
     else:
         options = {}
+
+    _load_assignments()
 
     poll_interval = options.get("poll_interval", 300)
     od_port = options.get("opendisplay_port", DEFAULT_PORT)

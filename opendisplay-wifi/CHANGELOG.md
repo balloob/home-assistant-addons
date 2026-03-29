@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9
+
+- Refactor the add-on server into focused internal modules for state, image processing, album playback, and web routes
+- Let album-assigned screens advance to the next image from the UI
+- Show when album preprocessing is still active so screens can explain partial album availability while images warm up
+
 ## 0.1.8
 
 - Add image preprocessing timing logs for load, fit, dither, and cache generation

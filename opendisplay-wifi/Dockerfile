@@ -11,6 +11,7 @@ WORKDIR /app
 # Copy project files
 COPY pyproject.toml ./
 COPY server.py ./
+COPY odw/ ./odw/
 COPY templates/ ./templates/
 
 # Install dependencies using uv

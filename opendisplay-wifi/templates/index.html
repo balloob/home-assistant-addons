@@ -476,6 +476,13 @@
             const nowPlaying = a.current_image_name ? ` — Now: ${esc(a.current_image_name)}` : "";
             assignHtml = `<div class="text-sm mt-1" style="color: var(--ha-blue)">Album: ${esc(label)}</div>`;
             if (nowPlaying) assignHtml += `<div class="text-xs text-gray-500 mt-0.5">${nowPlaying}</div>`;
+            if (a.preprocessing?.active && a.preprocessing.pending_images > 0) {
+              const prep = a.preprocessing;
+              const prepText = prep.ready_images > 0
+                ? `Album preprocessing: showing ${prep.ready_images}/${prep.total_images} ready image${prep.ready_images !== 1 ? "s" : ""} while ${prep.pending_images} more finish.`
+                : `Album preprocessing: no album image is ready yet. ${prep.pending_images} image${prep.pending_images !== 1 ? "s are" : " is"} still being prepared.`;
+              assignHtml += `<div class="text-xs mt-1 text-amber-600">${esc(prepText)}</div>`;
+            }
             if (a.current_image_id || a.current_source) {
               previewSrc = resolveThumbSrc(a.current_source, a.current_image_id);
             }
@@ -516,6 +523,7 @@
               </div>
               <div class="flex gap-2 ml-3 flex-shrink-0">
                 <button onclick="openAssignModal('${s.id}', ${s.width}, ${s.height})" class="btn-ha text-sm px-3 py-1.5">Assign</button>
+                ${s.assignment?.type === "album" ? `<button onclick="nextAlbumImage('${s.id}')" class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200">Next</button>` : ""}
                 ${s.assignment ? `<button onclick="unassign('${s.id}')" class="px-3 py-1.5 rounded-md text-white text-sm font-medium bg-red-500 hover:bg-red-600">Clear</button>` : ""}
               </div>
             </div>
@@ -746,6 +754,22 @@
         body: JSON.stringify({ screen_id: screenId }),
       });
       loadScreens();
+    }
+
+    async function nextAlbumImage(screenId) {
+      try {
+        const res = await fetch(`${BASE}/api/album/next`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ screen_id: screenId }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Failed to advance album");
+        setStatus("Advanced to the next album image.", "success");
+        loadScreens();
+      } catch (e) {
+        setStatus(`Failed to advance album: ${e.message}`, "error");
+      }
     }
 
     function openAlbumEditor(albumId) {

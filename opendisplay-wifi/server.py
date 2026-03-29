@@ -7,6 +7,7 @@ for managing connected screens, albums, and uploading images.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import io
 import json
@@ -15,6 +16,7 @@ import os
 import random
 import signal
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -74,11 +76,13 @@ THUMB_MAX_SIZE = (200, 200)
 
 # Display poll interval - kept short so UI changes are reflected quickly
 DISPLAY_POLL_INTERVAL = 30
+SLOW_OPERATION_LOG_THRESHOLD = 0.5
 
 # --- State ---
 
 # Connected screens: key = (width, height, colour_scheme)
 screens: dict[tuple[int, int, int], dict] = {}
+no_image_reasons: dict[tuple[int, int, int], str] = {}
 
 # Assignments per screen key
 # {"type": "image"|"album", "source": str|album_id, "fit": "contain"|"cover",
@@ -96,6 +100,13 @@ album_state: dict[tuple[int, int, int], dict] = {}
 # Image cache
 image_cache: dict[str, bytes] = {}
 url_pixel_hashes: dict[str, str] = {}
+cache_lock = threading.Lock()
+preprocess_lock = threading.Lock()
+preprocess_tasks: dict[str, concurrent.futures.Future[None]] = {}
+preprocess_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="opendisplay-preprocess",
+)
 
 
 # --- Persistence ---
@@ -179,8 +190,45 @@ def _key_from_id(screen_id: str) -> tuple[int, int, int] | None:
         return None
 
 
+def _remember_no_image_reason(key: tuple[int, int, int], reason: str) -> None:
+    if no_image_reasons.get(key) == reason:
+        return
+    no_image_reasons[key] = reason
+    _LOGGER.info("%s", reason)
+
+
+def _clear_no_image_reason(key: tuple[int, int, int]) -> None:
+    no_image_reasons.pop(key, None)
+
+
 def _is_url(source: str) -> bool:
     return source.startswith("http://") or source.startswith("https://")
+
+
+def _log_source(source: str) -> str:
+    if _is_url(source):
+        return source
+    return Path(source).name or source
+
+
+def _log_duration(
+    action: str,
+    started: float,
+    *,
+    level: int | None = None,
+    **details: object,
+) -> float:
+    elapsed = time.monotonic() - started
+    if level is None:
+        level = logging.INFO if elapsed >= SLOW_OPERATION_LOG_THRESHOLD else logging.DEBUG
+
+    suffix = ""
+    if details:
+        detail_str = ", ".join(f"{key}={value}" for key, value in details.items())
+        suffix = f" ({detail_str})"
+
+    _LOGGER.log(level, "%s in %.2fs%s", action, elapsed, suffix)
+    return elapsed
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -255,9 +303,12 @@ def _fetch_url_image(source: str, timeout: int = 60) -> Image.Image:
 
 def _load_image(source: str) -> Image.Image | None:
     """Load an image from a file path or URL."""
+    started = time.monotonic()
     if _is_url(source):
         try:
-            return _fetch_url_image(source)
+            img = _fetch_url_image(source)
+            _log_duration("Loaded URL image", started, source=_log_source(source))
+            return img
         except Exception:
             _LOGGER.exception("Failed to fetch URL: %s", source)
             return None
@@ -265,7 +316,9 @@ def _load_image(source: str) -> Image.Image | None:
         try:
             with Image.open(source) as img:
                 img.load()
-                return img.copy()
+                loaded = img.copy()
+            _log_duration("Loaded file image", started, source=_log_source(source))
+            return loaded
         except Exception:
             _LOGGER.exception("Failed to load file: %s", source)
             return None
@@ -290,18 +343,20 @@ def _generate_library_thumbnail(image_id: str, source: str) -> None:
 
 
 def _clear_caches_for_source(source: str) -> None:
-    to_remove = [key for key in image_cache if key.startswith(f"{source}_")]
-    for key in to_remove:
-        image_cache.pop(key, None)
-        url_pixel_hashes.pop(f"{key}_hash", None)
+    with cache_lock:
+        to_remove = [key for key in image_cache if key.startswith(f"{source}_")]
+        for key in to_remove:
+            image_cache.pop(key, None)
+            url_pixel_hashes.pop(_cache_hash_key(key), None)
 
 
 def _clear_caches_for_screen(key: tuple[int, int, int]) -> None:
     width, height = key[0], key[1]
-    to_remove = [cache_key for cache_key in image_cache if f"_{width}x{height}_" in cache_key]
-    for cache_key in to_remove:
-        image_cache.pop(cache_key, None)
-        url_pixel_hashes.pop(f"{cache_key}_hash", None)
+    with cache_lock:
+        to_remove = [cache_key for cache_key in image_cache if f"_{width}x{height}_" in cache_key]
+        for cache_key in to_remove:
+            image_cache.pop(cache_key, None)
+            url_pixel_hashes.pop(_cache_hash_key(cache_key), None)
 
 
 def _sync_images() -> None:
@@ -389,12 +444,209 @@ def _normalize_album_images(entries: list[dict]) -> list[dict]:
 
 def _convert_image(img: Image.Image, width: int, height: int, fit: str) -> bytes:
     """Convert a PIL image to 1bpp with the given fit mode."""
+    started = time.monotonic()
     fit_mode = FitMode.COVER if fit == "cover" else FitMode.CONTAIN
+
+    fit_started = time.monotonic()
     fitted = fit_image(img, (width, height), fit_mode)
+    _log_duration(
+        "Fitted image",
+        fit_started,
+        width=width,
+        height=height,
+        fit=fit,
+    )
 
     from epaper_dithering import MONO_4_26, DitherMode, dither_image
+
+    dither_started = time.monotonic()
     dithered = dither_image(fitted, MONO_4_26, mode=DitherMode.FLOYD_STEINBERG)
-    return dithered.convert("1").tobytes("raw", "1")
+    _log_duration(
+        "Dithered image",
+        dither_started,
+        width=width,
+        height=height,
+        fit=fit,
+    )
+
+    pack_started = time.monotonic()
+    data = dithered.convert("1").tobytes("raw", "1")
+    _log_duration(
+        "Packed image",
+        pack_started,
+        width=width,
+        height=height,
+        fit=fit,
+        bytes=len(data),
+    )
+    _log_duration(
+        "Converted image",
+        started,
+        width=width,
+        height=height,
+        fit=fit,
+        bytes=len(data),
+    )
+    return data
+
+
+def _cache_key(source: str, width: int, height: int, fit: str) -> str:
+    return f"{source}_{width}x{height}_{fit}"
+
+
+def _cache_hash_key(cache_key: str) -> str:
+    return f"{cache_key}_hash"
+
+
+def _get_cached_image(cache_key: str) -> bytes | None:
+    with cache_lock:
+        return image_cache.get(cache_key)
+
+
+def _set_cached_image(cache_key: str, data: bytes, pixel_hash: str | None = None) -> None:
+    with cache_lock:
+        image_cache[cache_key] = data
+        if pixel_hash is not None:
+            url_pixel_hashes[_cache_hash_key(cache_key)] = pixel_hash
+
+
+def _get_cached_pixel_hash(cache_key: str) -> str | None:
+    with cache_lock:
+        return url_pixel_hashes.get(_cache_hash_key(cache_key))
+
+
+def _preprocess_image(
+    cache_key: str,
+    source: str,
+    width: int,
+    height: int,
+    fit: str,
+    source_type: str,
+) -> None:
+    started = time.monotonic()
+    img = _load_image(source)
+    if img is None:
+        _LOGGER.warning("Unable to pre-process %s", source)
+        return
+
+    pixel_hash: str | None = None
+    if source_type == "url" or _is_url(source):
+        pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
+        if (
+            _get_cached_pixel_hash(cache_key) == pixel_hash
+            and _get_cached_image(cache_key) is not None
+        ):
+            _log_duration(
+                "Skipped image preprocessing",
+                started,
+                level=logging.INFO,
+                source=_log_source(source),
+                width=width,
+                height=height,
+                fit=fit,
+                reason="unchanged",
+            )
+            return
+
+    data = _convert_image(img, width, height, fit)
+    _set_cached_image(cache_key, data, pixel_hash=pixel_hash)
+    _log_duration(
+        "Prepared cached image",
+        started,
+        level=logging.INFO,
+        source=_log_source(source),
+        width=width,
+        height=height,
+        fit=fit,
+        type=source_type,
+        bytes=len(data),
+    )
+
+
+def _on_preprocess_done(cache_key: str, future: concurrent.futures.Future[None]) -> None:
+    with preprocess_lock:
+        if preprocess_tasks.get(cache_key) is future:
+            preprocess_tasks.pop(cache_key, None)
+
+    try:
+        future.result()
+    except Exception:
+        _LOGGER.exception("Failed to pre-process %s", cache_key)
+
+
+def _schedule_preprocess(
+    source: str,
+    width: int,
+    height: int,
+    fit: str,
+    source_type: str,
+) -> None:
+    cache_key = _cache_key(source, width, height, fit)
+
+    with preprocess_lock:
+        future = preprocess_tasks.get(cache_key)
+        if future is not None and not future.done():
+            return
+        _LOGGER.info(
+            "Queued image preprocessing for %s (%dx%d fit=%s type=%s)",
+            _log_source(source),
+            width,
+            height,
+            fit,
+            source_type,
+        )
+        future = preprocess_executor.submit(
+            _preprocess_image,
+            cache_key,
+            source,
+            width,
+            height,
+            fit,
+            source_type,
+        )
+        preprocess_tasks[cache_key] = future
+
+    future.add_done_callback(lambda done, key=cache_key: _on_preprocess_done(key, done))
+
+
+def _schedule_assignment_preprocess(
+    key: tuple[int, int, int],
+    assignment: dict,
+) -> None:
+    width, height = key[0], key[1]
+    fit = assignment.get("fit", "contain")
+
+    if assignment.get("type") == "album":
+        album = albums.get(assignment.get("source", ""))
+        if album is None:
+            return
+
+        current = _get_album_current_image(key, album)
+        if current is None:
+            return
+
+        source = str(current.get("source", "")).strip()
+        if not source:
+            return
+        source_type = str(current.get("type") or ("url" if _is_url(source) else "file"))
+        _LOGGER.info(
+            "Prewarming current album image for %s: %s",
+            _screen_id(key),
+            _log_source(source),
+        )
+        _schedule_preprocess(source, width, height, fit, source_type)
+        return
+
+    source = str(assignment.get("source", "")).strip()
+    if not source:
+        return
+    source_type = str(assignment.get("source_type") or ("url" if _is_url(source) else "file"))
+    _schedule_preprocess(source, width, height, fit, source_type)
+
+
+def _warm_assignment_caches() -> None:
+    for key, assignment in assignments.items():
+        _schedule_assignment_preprocess(key, assignment)
 
 
 def _get_album_current_image(key: tuple[int, int, int], album: dict) -> dict | None:
@@ -444,9 +696,17 @@ def _resolve_source(assignment: dict, key: tuple[int, int, int]) -> tuple[str, s
     if assignment["type"] == "album":
         album = albums.get(assignment["source"])
         if album is None:
+            _remember_no_image_reason(
+                key,
+                f"No image for {_screen_id(key)}: album {assignment['source']} not found",
+            )
             return None
         entry = _get_album_current_image(key, album)
         if entry is None:
+            _remember_no_image_reason(
+                key,
+                f"No image for {_screen_id(key)}: album {album['name']} has no entries",
+            )
             return None
         return (entry["source"], entry["type"])
     else:
@@ -473,6 +733,10 @@ def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
 
     assignment = assignments.get(key)
     if assignment is None:
+        _remember_no_image_reason(
+            key,
+            f"No image for {_screen_id(key)}: no assignment configured",
+        )
         return None
 
     resolved = _resolve_source(assignment, key)
@@ -483,34 +747,32 @@ def image_provider(announcement: DisplayAnnouncement | None) -> bytes | None:
     width = announcement.width
     height = announcement.height
     fit = assignment.get("fit", "contain")
-    cache_key = f"{source}_{width}x{height}_{fit}"
+    cache_key = _cache_key(source, width, height, fit)
+    cached = _get_cached_image(cache_key)
 
     if source_type == "url" or _is_url(source):
-        img = _load_image(source)
-        if img is None:
-            return image_cache.get(cache_key)
+        _schedule_preprocess(source, width, height, fit, source_type)
+        if cached is None:
+            _remember_no_image_reason(
+                key,
+                "No image for "
+                f"{_screen_id(key)}: waiting for preprocessed cache of {_log_source(source)}",
+            )
+        else:
+            _clear_no_image_reason(key)
+        return cached
 
-        pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
-        hash_key = f"{cache_key}_hash"
-        if url_pixel_hashes.get(hash_key) == pixel_hash and cache_key in image_cache:
-            return image_cache[cache_key]
+    if cached is not None:
+        _clear_no_image_reason(key)
+        return cached
 
-        data = _convert_image(img, width, height, fit)
-        image_cache[cache_key] = data
-        url_pixel_hashes[hash_key] = pixel_hash
-        return data
-
-    # Local file
-    if cache_key in image_cache:
-        return image_cache[cache_key]
-
-    img = _load_image(source)
-    if img is None:
-        return None
-
-    data = _convert_image(img, width, height, fit)
-    image_cache[cache_key] = data
-    return data
+    _schedule_preprocess(source, width, height, fit, source_type)
+    _remember_no_image_reason(
+        key,
+        "No image for "
+        f"{_screen_id(key)}: waiting for preprocessed cache of {_log_source(source)}",
+    )
+    return None
 
 
 # --- Web UI routes ---
@@ -611,6 +873,7 @@ async def handle_api_assign(request: web.Request) -> web.Response:
         }
 
     _clear_caches_for_screen(key)
+    _schedule_assignment_preprocess(key, assignments[key])
 
     _save_assignments()
     _LOGGER.info("Assigned %s (%s) to screen %s [fit=%s]", source, assign_type, screen_id, fit)
@@ -679,6 +942,7 @@ async def handle_api_album_update(request: web.Request) -> web.Response:
         if assignment.get("type") == "album" and assignment.get("source") == album_id:
             album_state.pop(key, None)
             _clear_caches_for_screen(key)
+            _schedule_assignment_preprocess(key, assignment)
 
     _save_albums()
     return web.json_response(album)
@@ -908,6 +1172,7 @@ async def run() -> int:
     _sync_images()
     _load_albums()
     _load_assignments()
+    _warm_assignment_caches()
 
     od_port = options.get("opendisplay_port", DEFAULT_PORT)
 
@@ -974,6 +1239,7 @@ async def run() -> int:
             await od_server.stop()
             await runner.cleanup()
         finally:
+            preprocess_executor.shutdown(wait=False, cancel_futures=True)
             for sig in handled_signals:
                 loop.remove_signal_handler(sig)
     return exit_code

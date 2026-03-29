@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Add image preprocessing timing logs for load, fit, dither, and cache generation
+- Queue screen image preprocessing in the background so clients do not block on cold conversions
+- Process cache work serially and prewarm only the current album image on startup
+
 ## 0.1.5
 
 - Rework the image management UI around a unified image library

@@ -7,7 +7,6 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import ScreenKey
 
 LOGGER = logging.getLogger(__name__)
 
@@ -257,18 +256,3 @@ class ProcessedImageCache:
             if meta.source == source:
                 self._delete_disk_entry(data_path, meta_path)
 
-    def clear_for_screen(self, key: ScreenKey) -> None:
-        width, height = key[0], key[1]
-        with self._lock:
-            to_remove = {
-                ref for ref in self._image_cache if ref.width == width and ref.height == height
-            } | {
-                ref for ref in self._pixel_hashes if ref.width == width and ref.height == height
-            }
-            for ref in to_remove:
-                self._image_cache.pop(ref, None)
-                self._pixel_hashes.pop(ref, None)
-
-        for meta, data_path, meta_path in self._cache_entries():
-            if meta.width == width and meta.height == height:
-                self._delete_disk_entry(data_path, meta_path)

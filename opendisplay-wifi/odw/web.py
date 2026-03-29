@@ -145,7 +145,6 @@ class WebHandlers:
             )
             self.state.assignments[key] = assignment
 
-        self.pipeline.clear_caches_for_screen(key)
         self.display.schedule_assignment_preprocess(key, assignment)
         self.library.save_assignments()
 

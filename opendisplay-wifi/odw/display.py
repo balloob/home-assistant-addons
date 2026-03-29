@@ -6,7 +6,7 @@ import time
 
 from opendisplay.wifi.protocol import DisplayAnnouncement
 
-from .image_pipeline import ImagePipeline
+from .image_pipeline import ImagePipeline, PreprocessScheduleResult
 from .models import (
     AlbumEntry,
     AlbumPlaybackState,
@@ -20,6 +20,7 @@ from .state import AppState, screen_key
 from .utils import is_url
 
 LOGGER = logging.getLogger(__name__)
+ALBUM_PREWARM_LIMIT = 5
 
 
 class DisplayService:
@@ -172,6 +173,9 @@ class DisplayService:
         if resolved is None:
             return None
 
+        if assignment.type == "album":
+            self.schedule_assignment_preprocess(key, assignment)
+
         source, source_type = resolved
         width, height = announcement.width, announcement.height
         cached = self.pipeline.get_cached_image_for(source, width, height, assignment.fit)
@@ -197,19 +201,26 @@ class DisplayService:
             ordered_entries = self.iter_album_entries_in_order(key, album)
             if not ordered_entries:
                 return
+            prewarm_entries = ordered_entries[:ALBUM_PREWARM_LIMIT]
             from .state import screen_id
 
-            LOGGER.info(
-                "Prewarming album images for %s: %d queued",
-                screen_id(key),
-                len(ordered_entries),
-            )
-            for entry in ordered_entries:
+            queued = 0
+            for entry in prewarm_entries:
                 source = entry.source.strip()
                 if not source:
                     continue
                 source_type = entry.type or ("url" if is_url(source) else "file")
-                self.pipeline.schedule_preprocess(source, width, height, fit, source_type)
+                result = self.pipeline.schedule_preprocess(source, width, height, fit, source_type)
+                if result is PreprocessScheduleResult.QUEUED:
+                    queued += 1
+            if queued > 0:
+                LOGGER.info(
+                    "Prewarming album images for %s: %d queued (%d targeted, %d total in rotation)",
+                    screen_id(key),
+                    queued,
+                    len(prewarm_entries),
+                    len(ordered_entries),
+                )
             return
 
         source = assignment.source.strip()
@@ -250,4 +261,3 @@ class DisplayService:
             ready_images=ready_images,
             active_images=len(active_cache_keys),
         )
-

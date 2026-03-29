@@ -31,6 +31,7 @@ class AppPaths:
     data_dir: Path
     upload_dir: Path
     thumb_dir: Path
+    processed_cache_dir: Path
     assignments_file: Path
     albums_file: Path
     images_file: Path
@@ -47,9 +48,6 @@ class AppState:
     albums: dict[str, AlbumRecord] = field(default_factory=dict)
     images: dict[str, ImageRecord] = field(default_factory=dict)
     album_state: dict[ScreenKey, AlbumPlaybackState] = field(default_factory=dict)
-    image_cache: dict[str, bytes] = field(default_factory=dict)
-    url_pixel_hashes: dict[str, str] = field(default_factory=dict)
-    cache_lock: threading.Lock = field(default_factory=threading.Lock)
     preprocess_lock: threading.Lock = field(default_factory=threading.Lock)
     preprocess_tasks: dict[str, concurrent.futures.Future[None]] = field(default_factory=dict)
     preprocess_executor: concurrent.futures.ThreadPoolExecutor = field(
@@ -74,14 +72,17 @@ def detect_paths(root_dir: Path) -> AppPaths:
     data_dir = addon_data_dir if is_addon else local_data_dir
     upload_dir = data_dir / "uploads"
     thumb_dir = data_dir / "thumbnails"
+    processed_cache_dir = data_dir / "processed-cache"
     upload_dir.mkdir(parents=True, exist_ok=True)
     thumb_dir.mkdir(parents=True, exist_ok=True)
+    processed_cache_dir.mkdir(parents=True, exist_ok=True)
 
     return AppPaths(
         root_dir=root_dir,
         data_dir=data_dir,
         upload_dir=upload_dir,
         thumb_dir=thumb_dir,
+        processed_cache_dir=processed_cache_dir,
         assignments_file=data_dir / "assignments.json",
         albums_file=data_dir / "albums.json",
         images_file=data_dir / "images.json",

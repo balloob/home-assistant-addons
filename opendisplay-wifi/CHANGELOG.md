@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10
+
+- Persist preprocessed display images on disk so restarts can reuse cached output
+- Keep the next five album images warmed as screens advance through album playback
+- Refactor processed-image caching into a dedicated module and simplify preprocess scheduling
+- Treat cancelled preprocess jobs during shutdown as expected instead of logging errors
+
 ## 0.1.9
 
 - Refactor the add-on server into focused internal modules for state, image processing, album playback, and web routes

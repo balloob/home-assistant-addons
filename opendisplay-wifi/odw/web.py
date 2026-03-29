@@ -145,7 +145,6 @@ class WebHandlers:
             )
             self.state.assignments[key] = assignment
 
-        self.pipeline.clear_caches_for_screen(key)
         self.display.schedule_assignment_preprocess(key, assignment)
         self.library.save_assignments()
 
@@ -229,17 +228,28 @@ class WebHandlers:
         data = await request.json()
         if "name" in data:
             album.name = str(data["name"])
+
+        old_sources = {entry.source for entry in album.images}
         if "images" in data:
             album.images = self.library.normalize_album_images(data["images"])
+        new_sources = {entry.source for entry in album.images}
+        images_changed = old_sources != new_sources
+
         if "transition_interval" in data:
             album.transition_interval = int(data["transition_interval"] or 60)
         if "shuffle" in data:
             album.shuffle = bool(data["shuffle"])
 
+        # Only clear caches for sources that were removed from the album.
+        # New/existing sources will be handled by schedule_assignment_preprocess.
+        removed_sources = old_sources - new_sources
+        for source in removed_sources:
+            self.pipeline.clear_caches_for_source(source)
+
         for key, assignment in self.state.assignments.items():
             if assignment.type == "album" and assignment.source == album_id:
-                self.state.album_state.pop(key, None)
-                self.pipeline.clear_caches_for_screen(key)
+                if images_changed:
+                    self.state.album_state.pop(key, None)
                 self.display.schedule_assignment_preprocess(key, assignment)
 
         self.library.save_albums()
@@ -379,7 +389,8 @@ class WebHandlers:
                 continue
             if assignment.image_id == image_id or assignment.source == source:
                 self.state.assignments.pop(key, None)
-                self.pipeline.clear_caches_for_screen(key)
+
+        self.pipeline.clear_caches_for_source(source)
 
         changed_albums: set[str] = set()
         for album in self.state.albums.values():
@@ -395,10 +406,7 @@ class WebHandlers:
         for key, assignment in self.state.assignments.items():
             if assignment.type == "album" and assignment.source in changed_albums:
                 self.state.album_state.pop(key, None)
-                self.pipeline.clear_caches_for_screen(key)
                 self.display.schedule_assignment_preprocess(key, assignment)
-
-        self.pipeline.clear_caches_for_source(source)
         self.state.images.pop(image_id, None)
         self.library.save_images()
         self.library.save_albums()

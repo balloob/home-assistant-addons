@@ -94,9 +94,6 @@ class ImagePipeline:
     def clear_caches_for_source(self, source: str) -> None:
         self.cache.clear_for_source(source)
 
-    def clear_caches_for_screen(self, key: ScreenKey) -> None:
-        self.cache.clear_for_screen(key)
-
     def is_cached(self, source: str, key: ScreenKey, fit: str) -> bool:
         return self.cache.has(source, key[0], key[1], fit)
 

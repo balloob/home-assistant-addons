@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11
+
+- Fix album update reprocessing all images instead of only new ones
+- Fix image deletion clearing caches for unrelated images on the same screen
+- Remove overly broad screen-wide cache invalidation in favor of per-source clearing
+
 ## 0.1.10
 
 - Persist preprocessed display images on disk so restarts can reuse cached output

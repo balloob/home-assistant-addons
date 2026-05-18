@@ -340,11 +340,7 @@ class RequestHandler {
     this.busy = true;
     console.log(requestId, "Preparing next request");
     try {
-      const navigateResult = await this.browser.navigatePage({
-        ...requestParams,
-        // No unnecessary wait time, as we're just warming up
-        extraWait: 0,
-      });
+      const navigateResult = await this.browser.navigatePage(requestParams);
       console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
     } catch (err) {
       console.error(requestId, "Error preparing next request", err);

@@ -445,9 +445,6 @@ export class Browser {
           event.detail = { replace: true };
           window.dispatchEvent(event);
         }, pagePath);
-      } else {
-        // We are already on the correct page
-        defaultWait = 0;
       }
 
       this.lastRequestedPath = pagePath;

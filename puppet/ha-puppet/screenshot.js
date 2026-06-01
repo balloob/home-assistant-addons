@@ -562,7 +562,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate, bmpMode = "color" }) {
+  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate, fullPage = false, bmpMode = "color" }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -574,13 +574,25 @@ export class Browser {
     try {
       const page = await this.getPage();
 
+      // Default: clip to the viewport (minus the cropped header). With
+      // fullPage, clip to the document's full scroll height so a dashboard that
+      // extends below the fold is captured in one shot — still cropping the
+      // header. (Puppeteer renders beyond the viewport for the taller clip.)
+      let clipHeight = viewport.height - headerHeight;
+      if (fullPage) {
+        const scrollHeight = await page.evaluate(
+          () => document.documentElement.scrollHeight,
+        );
+        clipHeight = Math.max(scrollHeight - headerHeight, 1);
+      }
+
       let image = await page.screenshot({
         type: "png",
         clip: {
           x: 0,
           y: headerHeight,
           width: viewport.width,
-          height: viewport.height - headerHeight,
+          height: clipHeight,
         },
       });
 

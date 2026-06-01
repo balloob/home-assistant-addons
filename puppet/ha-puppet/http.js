@@ -190,6 +190,9 @@ class RequestHandler {
 
       const invert = requestUrl.searchParams.has("invert");
 
+      // Capture the whole scrollable page instead of just the viewport.
+      const fullPage = requestUrl.searchParams.has("fullPage");
+
       let format = requestUrl.searchParams.get("format") || "png";
       if (!["png", "jpeg", "webp", "bmp"].includes(format)) {
         format = "png";
@@ -236,6 +239,7 @@ class RequestHandler {
         paletteColors,
         dithering,
         invert,
+        fullPage,
         zoom,
         format,
         bmpMode,

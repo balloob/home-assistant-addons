@@ -513,14 +513,31 @@ export class Browser {
         console.log("Timeout waiting for HA to finish loading");
       }
 
+      // If the access token is missing/invalid/expired, Home Assistant
+      // redirects to the login screen instead of the dashboard. Returning a
+      // 200 login-page screenshot is a confusing silent failure, and the
+      // language/theme evaluate() calls below crash on the login page (there is
+      // no <home-assistant> element), which kills the browser. Detect it via
+      // the auth redirect URL or the ha-authorize element and fail with a clear
+      // error instead.
+      const onLoginScreen = await page.evaluate(() => {
+        if (location.pathname.startsWith("/auth/authorize")) return true;
+        const haEl = document.querySelector("home-assistant");
+        return !!haEl?.shadowRoot?.querySelector("ha-authorize");
+      });
+      if (onLoginScreen) {
+        throw new CannotOpenPageError(401, pagePath);
+      }
+
       // Update language
       // Should really be done via localStorage.selectedLanguage
       // but that doesn't seem to work
       if (lang !== this.lastRequestedLang) {
         await page.evaluate((newLang) => {
-          document
-            .querySelector("home-assistant")
-            ._selectLanguage(newLang, false);
+          const haEl = document.querySelector("home-assistant");
+          if (haEl && typeof haEl._selectLanguage === "function") {
+            haEl._selectLanguage(newLang, false);
+          }
         }, lang || "en");
         this.lastRequestedLang = lang;
         defaultWait += 1000;
@@ -533,11 +550,14 @@ export class Browser {
       ) {
         await page.evaluate(
           ({ theme, dark }) => {
-            document.querySelector("home-assistant").dispatchEvent(
-              new CustomEvent("settheme", {
-                detail: { theme, dark },
-              }),
-            );
+            const haEl = document.querySelector("home-assistant");
+            if (haEl) {
+              haEl.dispatchEvent(
+                new CustomEvent("settheme", {
+                  detail: { theme, dark },
+                }),
+              );
+            }
           },
           { theme: theme || "", dark },
         );

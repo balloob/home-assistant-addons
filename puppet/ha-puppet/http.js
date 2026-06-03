@@ -7,6 +7,10 @@ import { loadDevicesConfig, getDeviceConfig } from "./devices.js";
 
 // Maximum number of next requests to keep in memory
 const MAX_NEXT_REQUESTS = 100;
+// Initial viewport height (px) used to render a "WIDTHxauto" request before the
+// full page height is measured. Kept modest so short pages don't gain trailing
+// whitespace; taller content still renders and is captured via the clip.
+const AUTO_RENDER_HEIGHT = 800;
 const BROWSER_TIMEOUT = 30_000; // Timeout for browser inactivity in milliseconds
 
 class RequestHandler {
@@ -111,11 +115,20 @@ class RequestHandler {
         extraWait = undefined;
       }
 
-      // Get viewport - use device config as default if device is specified
+      // Get viewport - use device config as default if device is specified.
+      // The height may be the literal "auto" (e.g. "1000xauto") to capture the
+      // whole scrollable page; the captured height is then derived from the
+      // rendered content and capped (see MAX_AUTO_HEIGHT in screenshot.js).
+      let autoHeight = false;
       let viewportParams;
       const viewportQuery = requestUrl.searchParams.get("viewport");
       if (viewportQuery) {
-        viewportParams = viewportQuery.split("x").map((n) => parseInt(n));
+        const [widthStr, heightStr] = viewportQuery.split("x");
+        autoHeight = (heightStr || "").toLowerCase() === "auto";
+        viewportParams = [
+          parseInt(widthStr),
+          autoHeight ? AUTO_RENDER_HEIGHT : parseInt(heightStr),
+        ];
       } else if (deviceConfig) {
         viewportParams = [deviceConfig.width, deviceConfig.height];
       } else {
@@ -190,9 +203,6 @@ class RequestHandler {
 
       const invert = requestUrl.searchParams.has("invert");
 
-      // Capture the whole scrollable page instead of just the viewport.
-      const fullPage = requestUrl.searchParams.has("fullPage");
-
       let format = requestUrl.searchParams.get("format") || "png";
       if (!["png", "jpeg", "webp", "bmp"].includes(format)) {
         format = "png";
@@ -239,7 +249,7 @@ class RequestHandler {
         paletteColors,
         dithering,
         invert,
-        fullPage,
+        autoHeight,
         zoom,
         format,
         bmpMode,

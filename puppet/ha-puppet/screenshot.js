@@ -6,6 +6,10 @@ import { CannotOpenPageError } from "./error.js";
 
 const HEADER_HEIGHT = 56;
 
+// Cap (px) for an auto-height ("WIDTHxauto") screenshot so a very long
+// dashboard can't produce a runaway image. Content taller than this is clipped.
+const MAX_AUTO_HEIGHT = 4000;
+
 // Dithering algorithms
 function applyDithering(data, width, height, palette, channels = 4, algorithm = "atkinson", paletteColors = null) {
   // Convert hex colors to RGB
@@ -562,7 +566,7 @@ export class Browser {
     }
   }
 
-  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate, fullPage = false, bmpMode = "color" }) {
+  async screenshotPage({ viewport, colors, paletteColors, dithering, invert, zoom, format, rotate, autoHeight = false, bmpMode = "color" }) {
     let start = new Date();
     if (this.busy) {
       throw new Error("Browser is busy");
@@ -575,15 +579,20 @@ export class Browser {
       const page = await this.getPage();
 
       // Default: clip to the viewport (minus the cropped header). With
-      // fullPage, clip to the document's full scroll height so a dashboard that
-      // extends below the fold is captured in one shot — still cropping the
-      // header. (Puppeteer renders beyond the viewport for the taller clip.)
+      // autoHeight (a "WIDTHxauto" viewport), clip to the document's full scroll
+      // height instead so a dashboard that extends below the fold is captured in
+      // one shot — still cropping the header, and capped at MAX_AUTO_HEIGHT so a
+      // very long page can't run away. (Puppeteer renders beyond the viewport
+      // for the taller clip.)
       let clipHeight = viewport.height - headerHeight;
-      if (fullPage) {
+      if (autoHeight) {
         const scrollHeight = await page.evaluate(
           () => document.documentElement.scrollHeight,
         );
-        clipHeight = Math.max(scrollHeight - headerHeight, 1);
+        clipHeight = Math.min(
+          Math.max(scrollHeight - headerHeight, 1),
+          MAX_AUTO_HEIGHT,
+        );
       }
 
       let image = await page.screenshot({

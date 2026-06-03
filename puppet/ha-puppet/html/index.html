@@ -142,6 +142,20 @@
                   --tw-ring-color: var(--ha-blue);
                 "
               />
+              <div class="flex items-center mt-2">
+                <input
+                  type="checkbox"
+                  id="auto_height"
+                  class="h-4 w-4 border-gray-300 rounded"
+                  style="
+                    color: var(--ha-blue);
+                    --tw-ring-color: var(--ha-blue);
+                  "
+                />
+                <label for="auto_height" class="ml-2 block text-sm text-gray-700"
+                  >Auto height (capture full page, max 4000px)</label
+                >
+              </div>
             </div>
 
             <!-- Next -->
@@ -640,6 +654,27 @@
     </div>
 
     <script>
+      // Effective viewport height for the URL: the literal "auto" when the
+      // auto-height box is checked, otherwise the numeric height field.
+      function getViewportHeight() {
+        return document.getElementById("auto_height").checked
+          ? "auto"
+          : document.getElementById("height").value;
+      }
+
+      // Apply a viewport height string (a number or "auto") to the form,
+      // toggling the auto-height checkbox and disabling the number field to
+      // match. A numeric value is preserved so unchecking auto restores it.
+      function setViewportHeight(height) {
+        const isAuto = String(height).toLowerCase() === "auto";
+        const heightEl = document.getElementById("height");
+        document.getElementById("auto_height").checked = isAuto;
+        heightEl.disabled = isAuto;
+        if (!isAuto && height !== undefined && height !== "") {
+          heightEl.value = height;
+        }
+      }
+
       // Save settings to localStorage
       function saveSettings() {
         const settings = {
@@ -647,6 +682,7 @@
           path: document.getElementById("path").value,
           width: document.getElementById("width").value,
           height: document.getElementById("height").value,
+          auto_height: document.getElementById("auto_height").checked,
           format: document.getElementById("format").value,
           theme: document.getElementById("theme").value,
           dark: document.getElementById("dark").checked,
@@ -680,6 +716,10 @@
             document.getElementById("width").value = settings.width;
           if (settings.height !== undefined)
             document.getElementById("height").value = settings.height;
+          if (settings.auto_height !== undefined) {
+            document.getElementById("auto_height").checked = settings.auto_height;
+            document.getElementById("height").disabled = settings.auto_height;
+          }
           if (settings.format !== undefined)
             document.getElementById("format").value = settings.format;
           if (settings.theme !== undefined)
@@ -725,12 +765,12 @@
           document.getElementById("path").value = urlParams.get("path");
         }
 
-        // Parse viewport (widthxheight)
+        // Parse viewport (widthxheight, or widthxauto)
         const viewport = urlParams.get("viewport");
         if (viewport) {
           const [width, height] = viewport.split("x");
           if (width) document.getElementById("width").value = width;
-          if (height) document.getElementById("height").value = height;
+          if (height) setViewportHeight(height);
         }
 
         // Load other parameters
@@ -780,7 +820,7 @@
         const device = document.getElementById("device").value;
         const path = document.getElementById("path").value || "/";
         const width = document.getElementById("width").value;
-        const height = document.getElementById("height").value;
+        const height = getViewportHeight();
         const format = document.getElementById("format").value;
         const theme = document.getElementById("theme").value;
         const dark = document.getElementById("dark").checked;
@@ -930,12 +970,12 @@
             document.getElementById("path").value = pathname;
           }
 
-          // Parse viewport (widthxheight)
+          // Parse viewport (widthxheight, or widthxauto)
           const viewport = urlParams.get("viewport");
           if (viewport) {
             const [width, height] = viewport.split("x");
             if (width) document.getElementById("width").value = width;
-            if (height) document.getElementById("height").value = height;
+            if (height) setViewportHeight(height);
           }
 
           // Load other parameters
@@ -1031,7 +1071,7 @@
         const device = document.getElementById("device").value;
         const path = document.getElementById("path").value || "/";
         const width = document.getElementById("width").value;
-        const height = document.getElementById("height").value;
+        const height = getViewportHeight();
         const format = document.getElementById("format").value;
         const theme = document.getElementById("theme").value;
         const dark = document.getElementById("dark").checked;
@@ -1347,7 +1387,7 @@
           document.getElementById("width").value = device.width;
         }
         if (device.height !== undefined) {
-          document.getElementById("height").value = device.height;
+          setViewportHeight(device.height);
         }
         if (device.colors !== undefined) {
           document.getElementById("colors").value = device.colors;
@@ -1439,6 +1479,12 @@
       // Note: loadPreview() is called by the generic select change listener below
       document.getElementById("device").addEventListener("change", () => {
         onDeviceChange();
+      });
+
+      // Disable the height field while auto height is on (URL/preview refresh is
+      // handled by the generic input listeners above).
+      document.getElementById("auto_height").addEventListener("change", (e) => {
+        document.getElementById("height").disabled = e.target.checked;
       });
 
       // Load settings and initialize on page load

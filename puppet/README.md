@@ -91,10 +91,10 @@ http://homeassistant.local:10000/home?viewport=1000x1000&zoom=1.3
 
 ### Full page
 
-By default the screenshot is clipped to the viewport height. Add the `fullPage` parameter (no value needed) to capture the entire scrollable page instead, so a dashboard that extends below the fold is captured in one shot. The viewport width still applies; the height grows to fit the content.
+By default the screenshot is clipped to the viewport height. Set the height to `auto` in the `viewport` parameter to capture the entire scrollable page instead, so a dashboard that extends below the fold is captured in one shot. The width still applies; the height grows to fit the content, capped at 4000px so a very long page can't produce a runaway image.
 
 ```
-http://homeassistant.local:10000/home?viewport=1000x1000&fullPage
+http://homeassistant.local:10000/home?viewport=1000xauto
 ```
 
 ### Output formats

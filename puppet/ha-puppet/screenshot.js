@@ -514,19 +514,12 @@ export class Browser {
       }
 
       // If the access token is missing/invalid/expired, Home Assistant
-      // redirects to the login screen instead of the dashboard. Returning a
-      // 200 login-page screenshot is a confusing silent failure, and the
-      // language/theme evaluate() calls below crash on the login page (there is
-      // no <home-assistant> element), which kills the browser. Detect it via
-      // the auth redirect URL or the ha-authorize element and fail with a clear
+      // redirects to the login screen (/auth/authorize) instead of the
+      // dashboard. Returning a 200 login-page screenshot is a confusing silent
+      // failure, so detect the redirect from the page URL and fail with a clear
       // error instead.
-      const onLoginScreen = await page.evaluate(() => {
-        if (location.pathname.startsWith("/auth/authorize")) return true;
-        const haEl = document.querySelector("home-assistant");
-        return !!haEl?.shadowRoot?.querySelector("ha-authorize");
-      });
-      if (onLoginScreen) {
-        throw new CannotOpenPageError(401, pagePath);
+      if (new URL(page.url()).pathname.startsWith("/auth/authorize")) {
+        throw new CannotOpenPageError(500, pagePath);
       }
 
       // Update language
@@ -534,10 +527,9 @@ export class Browser {
       // but that doesn't seem to work
       if (lang !== this.lastRequestedLang) {
         await page.evaluate((newLang) => {
-          const haEl = document.querySelector("home-assistant");
-          if (haEl && typeof haEl._selectLanguage === "function") {
-            haEl._selectLanguage(newLang, false);
-          }
+          document
+            .querySelector("home-assistant")
+            ._selectLanguage(newLang, false);
         }, lang || "en");
         this.lastRequestedLang = lang;
         defaultWait += 1000;
@@ -550,14 +542,11 @@ export class Browser {
       ) {
         await page.evaluate(
           ({ theme, dark }) => {
-            const haEl = document.querySelector("home-assistant");
-            if (haEl) {
-              haEl.dispatchEvent(
-                new CustomEvent("settheme", {
-                  detail: { theme, dark },
-                }),
-              );
-            }
+            document.querySelector("home-assistant").dispatchEvent(
+              new CustomEvent("settheme", {
+                detail: { theme, dark },
+              }),
+            );
           },
           { theme: theme || "", dark },
         );

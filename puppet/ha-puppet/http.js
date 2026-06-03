@@ -260,7 +260,7 @@ class RequestHandler {
       } catch (err) {
         if (err instanceof CannotOpenPageError) {
           console.error(requestId, `Cannot open page: ${err.message}`);
-          response.statusCode = 404;
+          response.statusCode = err.status;
           response.end(`Cannot open page: ${err.message}`);
           return;
         }

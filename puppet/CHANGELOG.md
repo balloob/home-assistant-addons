@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.0
+
+- Allow setting height to `auto` in viewport string (`viewport=1000xauto`)
+- Return 500 when detecting invalid authentication token
+
 ## 2.4.3
 
 - Skip downloading Chrome during build since system Chromium is used, reducing addon backup size by over 2GB

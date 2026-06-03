@@ -517,6 +517,15 @@ export class Browser {
         console.log("Timeout waiting for HA to finish loading");
       }
 
+      // If the access token is missing/invalid/expired, Home Assistant
+      // redirects to the login screen (/auth/authorize) instead of the
+      // dashboard. Returning a 200 login-page screenshot is a confusing silent
+      // failure, so detect the redirect from the page URL and fail with a clear
+      // error instead.
+      if (new URL(page.url()).pathname.startsWith("/auth/authorize")) {
+        throw new CannotOpenPageError(500, pagePath);
+      }
+
       // Update language
       // Should really be done via localStorage.selectedLanguage
       // but that doesn't seem to work

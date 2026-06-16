@@ -17,10 +17,11 @@ class ProcessedImageRef:
     width: int
     height: int
     fit: str
+    colour_scheme: int
 
     @property
     def cache_key(self) -> str:
-        return f"{self.source}_{self.width}x{self.height}_{self.fit}"
+        return f"{self.source}_{self.width}x{self.height}_{self.fit}_cs{self.colour_scheme}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,7 @@ class ProcessedCacheMeta:
     width: int
     height: int
     fit: str
+    colour_scheme: int = 0
     pixel_hash: str | None = None
 
     @property
@@ -38,6 +40,7 @@ class ProcessedCacheMeta:
             width=self.width,
             height=self.height,
             fit=self.fit,
+            colour_scheme=self.colour_scheme,
         )
 
     @property
@@ -51,6 +54,7 @@ class ProcessedCacheMeta:
             "width": self.width,
             "height": self.height,
             "fit": self.fit,
+            "colour_scheme": self.colour_scheme,
             "pixel_hash": self.pixel_hash,
         }
 
@@ -70,6 +74,9 @@ class ProcessedCacheMeta:
         height = raw.get("height")
         if not isinstance(width, int) or not isinstance(height, int):
             return None
+        colour_scheme = raw.get("colour_scheme", 0)
+        if not isinstance(colour_scheme, int):
+            colour_scheme = 0
 
         pixel_hash = raw.get("pixel_hash")
         if pixel_hash is not None and not isinstance(pixel_hash, str):
@@ -80,6 +87,7 @@ class ProcessedCacheMeta:
             width=width,
             height=height,
             fit=fit,
+            colour_scheme=colour_scheme,
             pixel_hash=pixel_hash,
         )
 
@@ -91,11 +99,17 @@ class ProcessedImageCache:
         self._pixel_hashes: dict[ProcessedImageRef, str] = {}
         self._lock = threading.Lock()
 
-    def ref(self, source: str, width: int, height: int, fit: str) -> ProcessedImageRef:
-        return ProcessedImageRef(source=source, width=width, height=height, fit=fit)
+    def ref(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> ProcessedImageRef:
+        return ProcessedImageRef(
+            source=source,
+            width=width,
+            height=height,
+            fit=fit,
+            colour_scheme=colour_scheme,
+        )
 
-    def cache_key(self, source: str, width: int, height: int, fit: str) -> str:
-        return self.ref(source, width, height, fit).cache_key
+    def cache_key(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> str:
+        return self.ref(source, width, height, fit, colour_scheme).cache_key
 
     def _cache_file_stem(self, ref: ProcessedImageRef) -> str:
         return hashlib.sha256(ref.cache_key.encode("utf-8")).hexdigest()
@@ -146,8 +160,8 @@ class ProcessedImageCache:
         data_path.unlink(missing_ok=True)
         meta_path.unlink(missing_ok=True)
 
-    def get(self, source: str, width: int, height: int, fit: str) -> bytes | None:
-        ref = self.ref(source, width, height, fit)
+    def get(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> bytes | None:
+        ref = self.ref(source, width, height, fit, colour_scheme)
         with self._lock:
             cached = self._image_cache.get(ref)
 
@@ -175,8 +189,8 @@ class ProcessedImageCache:
 
         return cached
 
-    def has(self, source: str, width: int, height: int, fit: str) -> bool:
-        ref = self.ref(source, width, height, fit)
+    def has(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> bool:
+        ref = self.ref(source, width, height, fit, colour_scheme)
         with self._lock:
             if ref in self._image_cache:
                 return True
@@ -189,16 +203,18 @@ class ProcessedImageCache:
         width: int,
         height: int,
         fit: str,
+        colour_scheme: int,
         data: bytes,
         *,
         pixel_hash: str | None = None,
     ) -> None:
-        ref = self.ref(source, width, height, fit)
+        ref = self.ref(source, width, height, fit, colour_scheme)
         meta = ProcessedCacheMeta(
             source=source,
             width=width,
             height=height,
             fit=fit,
+            colour_scheme=colour_scheme,
             pixel_hash=pixel_hash,
         )
 
@@ -213,11 +229,11 @@ class ProcessedImageCache:
             self._data_path(ref).write_bytes(data)
             self._meta_path(ref).write_text(json.dumps(meta.to_dict()))
         except Exception:
-            self.remove(source, width, height, fit)
+            self.remove(source, width, height, fit, colour_scheme)
             LOGGER.exception("Failed to persist cached image for %s", ref.cache_key)
 
-    def get_pixel_hash(self, source: str, width: int, height: int, fit: str) -> str | None:
-        ref = self.ref(source, width, height, fit)
+    def get_pixel_hash(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> str | None:
+        ref = self.ref(source, width, height, fit, colour_scheme)
         with self._lock:
             pixel_hash = self._pixel_hashes.get(ref)
 
@@ -233,8 +249,8 @@ class ProcessedImageCache:
 
         return meta.pixel_hash
 
-    def remove(self, source: str, width: int, height: int, fit: str) -> None:
-        ref = self.ref(source, width, height, fit)
+    def remove(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> None:
+        ref = self.ref(source, width, height, fit, colour_scheme)
         with self._lock:
             self._image_cache.pop(ref, None)
             self._pixel_hashes.pop(ref, None)
@@ -255,4 +271,3 @@ class ProcessedImageCache:
         for meta, data_path, meta_path in self._cache_entries():
             if meta.source == source:
                 self._delete_disk_entry(data_path, meta_path)
-

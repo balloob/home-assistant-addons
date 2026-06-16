@@ -20,6 +20,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def encode_bitplanes(image: Image.Image) -> bytes:
+    """Encode BWR/BWY palette images as concatenated black/white and accent bitplanes."""
     if image.mode != "P":
         raise ValueError(f"Expected palette image, got {image.mode}")
 
@@ -101,8 +102,8 @@ class ImagePipeline:
             scheme = ColorScheme.MONO
 
         dither_started = time.monotonic()
-        palette = MONO_4_26 if scheme == ColorScheme.MONO else scheme
-        dithered = dither_image(fitted, palette, mode=DitherMode.FLOYD_STEINBERG)
+        dither_palette = MONO_4_26 if scheme == ColorScheme.MONO else scheme
+        dithered = dither_image(fitted, dither_palette, mode=DitherMode.FLOYD_STEINBERG)
         log_duration("Dithered image", dither_started, width=width, height=height, fit=fit, scheme=scheme.name)
 
         pack_started = time.monotonic()

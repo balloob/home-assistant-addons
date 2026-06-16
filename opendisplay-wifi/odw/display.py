@@ -178,20 +178,21 @@ class DisplayService:
 
         source, source_type = resolved
         width, height = announcement.width, announcement.height
-        cached = self.pipeline.get_cached_image_for(source, width, height, assignment.fit)
+        colour_scheme = announcement.colour_scheme
+        cached = self.pipeline.get_cached_image_for(source, width, height, assignment.fit, colour_scheme)
 
         if source_type == "url" or is_url(source):
-            self.pipeline.schedule_preprocess(source, width, height, assignment.fit, source_type)
+            self.pipeline.schedule_preprocess(source, width, height, assignment.fit, colour_scheme, source_type)
             return cached
 
         if cached is not None:
             return cached
 
-        self.pipeline.schedule_preprocess(source, width, height, assignment.fit, source_type)
+        self.pipeline.schedule_preprocess(source, width, height, assignment.fit, colour_scheme, source_type)
         return None
 
     def schedule_assignment_preprocess(self, key: ScreenKey, assignment: ScreenAssignment) -> None:
-        width, height = key[0], key[1]
+        width, height, colour_scheme = key
         fit = assignment.fit
 
         if assignment.type == "album":
@@ -210,7 +211,7 @@ class DisplayService:
                 if not source:
                     continue
                 source_type = entry.type or ("url" if is_url(source) else "file")
-                result = self.pipeline.schedule_preprocess(source, width, height, fit, source_type)
+                result = self.pipeline.schedule_preprocess(source, width, height, fit, colour_scheme, source_type)
                 if result is PreprocessScheduleResult.QUEUED:
                     queued += 1
             if queued > 0:
@@ -227,7 +228,7 @@ class DisplayService:
         if not source:
             return
         source_type = assignment.source_type or ("url" if is_url(source) else "file")
-        self.pipeline.schedule_preprocess(source, width, height, fit, source_type)
+        self.pipeline.schedule_preprocess(source, width, height, fit, colour_scheme, source_type)
 
     def warm_assignment_caches(self) -> None:
         for key, assignment in self.state.assignments.items():
@@ -253,7 +254,7 @@ class DisplayService:
                 ready_images += 1
             if self.pipeline.is_preprocess_active(source, key, fit):
                 active_cache_keys.add(
-                    self.pipeline.cache_key(source, key[0], key[1], fit),
+                    self.pipeline.cache_key(source, key[0], key[1], fit, key[2]),
                 )
 
         return AlbumPreprocessStatus(

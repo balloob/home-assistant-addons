@@ -6,7 +6,7 @@ import logging
 import time
 from enum import Enum
 
-from opendisplay.encoding.images import fit_image
+from opendisplay.encoding.images import encode_image, fit_image
 from opendisplay.models.enums import FitMode
 from PIL import Image
 
@@ -17,6 +17,33 @@ from .state import AppState, SLOW_OPERATION_LOG_THRESHOLD
 from .utils import is_url, log_source
 
 LOGGER = logging.getLogger(__name__)
+
+
+def encode_bitplanes(image: Image.Image) -> bytes:
+    """Encode BWR/BWY palette images as concatenated black/white and accent bitplanes."""
+    if image.mode != "P":
+        raise ValueError(f"Expected palette image, got {image.mode}")
+
+    width, height = image.size
+    pixels = image.tobytes()
+    bytes_per_row = (width + 7) // 8
+    plane1 = bytearray(bytes_per_row * height)
+    plane2 = bytearray(bytes_per_row * height)
+
+    for y in range(height):
+        row_offset = y * width
+        byte_row_offset = y * bytes_per_row
+        for x in range(width):
+            palette_idx = pixels[row_offset + x]
+            bit = 1 << (7 - (x % 8))
+            byte_idx = byte_row_offset + x // 8
+
+            if palette_idx == 1:
+                plane1[byte_idx] |= bit
+            elif palette_idx == 2:
+                plane2[byte_idx] |= bit
+
+    return bytes(plane1) + bytes(plane2)
 
 
 def log_duration(
@@ -51,7 +78,14 @@ class ImagePipeline:
         self.library = library
         self.cache = ProcessedImageCache(state.paths.processed_cache_dir)
 
-    def convert_image(self, img: Image.Image, width: int, height: int, fit: str) -> bytes:
+    def convert_image(
+        self,
+        img: Image.Image,
+        width: int,
+        height: int,
+        fit: str,
+        colour_scheme: int,
+    ) -> bytes:
         started = time.monotonic()
         fit_mode = FitMode.COVER if fit == "cover" else FitMode.CONTAIN
 
@@ -59,20 +93,31 @@ class ImagePipeline:
         fitted = fit_image(img, (width, height), fit_mode)
         log_duration("Fitted image", fit_started, width=width, height=height, fit=fit)
 
-        from epaper_dithering import MONO_4_26, DitherMode, dither_image
+        from epaper_dithering import MONO_4_26, ColorScheme, DitherMode, dither_image
+
+        try:
+            scheme = ColorScheme.from_value(colour_scheme)
+        except ValueError:
+            LOGGER.warning("Unsupported colour scheme %s; falling back to monochrome", colour_scheme)
+            scheme = ColorScheme.MONO
 
         dither_started = time.monotonic()
-        dithered = dither_image(fitted, MONO_4_26, mode=DitherMode.FLOYD_STEINBERG)
-        log_duration("Dithered image", dither_started, width=width, height=height, fit=fit)
+        dither_palette = MONO_4_26 if scheme == ColorScheme.MONO else scheme
+        dithered = dither_image(fitted, dither_palette, mode=DitherMode.FLOYD_STEINBERG)
+        log_duration("Dithered image", dither_started, width=width, height=height, fit=fit, scheme=scheme.name)
 
         pack_started = time.monotonic()
-        data = dithered.convert("1").tobytes("raw", "1")
+        if scheme in (ColorScheme.BWR, ColorScheme.BWY):
+            data = encode_bitplanes(dithered)
+        else:
+            data = encode_image(dithered, scheme)
         log_duration(
             "Packed image",
             pack_started,
             width=width,
             height=height,
             fit=fit,
+            scheme=scheme.name,
             bytes=len(data),
         )
         log_duration(
@@ -81,24 +126,32 @@ class ImagePipeline:
             width=width,
             height=height,
             fit=fit,
+            scheme=scheme.name,
             bytes=len(data),
         )
         return data
 
-    def cache_key(self, source: str, width: int, height: int, fit: str) -> str:
-        return self.cache.cache_key(source, width, height, fit)
+    def cache_key(self, source: str, width: int, height: int, fit: str, colour_scheme: int) -> str:
+        return self.cache.cache_key(source, width, height, fit, colour_scheme)
 
-    def get_cached_image_for(self, source: str, width: int, height: int, fit: str) -> bytes | None:
-        return self.cache.get(source, width, height, fit)
+    def get_cached_image_for(
+        self,
+        source: str,
+        width: int,
+        height: int,
+        fit: str,
+        colour_scheme: int,
+    ) -> bytes | None:
+        return self.cache.get(source, width, height, fit, colour_scheme)
 
     def clear_caches_for_source(self, source: str) -> None:
         self.cache.clear_for_source(source)
 
     def is_cached(self, source: str, key: ScreenKey, fit: str) -> bool:
-        return self.cache.has(source, key[0], key[1], fit)
+        return self.cache.has(source, key[0], key[1], fit, key[2])
 
     def is_preprocess_active(self, source: str, key: ScreenKey, fit: str) -> bool:
-        cache_key = self.cache_key(source, key[0], key[1], fit)
+        cache_key = self.cache_key(source, key[0], key[1], fit, key[2])
         with self.state.preprocess_lock:
             future = self.state.preprocess_tasks.get(cache_key)
             return future is not None and not future.done()
@@ -109,10 +162,11 @@ class ImagePipeline:
         width: int,
         height: int,
         fit: str,
+        colour_scheme: int,
         source_type: str,
     ) -> None:
         started = time.monotonic()
-        cache_key = self.cache_key(source, width, height, fit)
+        cache_key = self.cache_key(source, width, height, fit, colour_scheme)
         img = self.library.load_image(source)
         if img is None:
             LOGGER.warning("Unable to pre-process %s", source)
@@ -122,8 +176,8 @@ class ImagePipeline:
         if source_type == "url" or is_url(source):
             pixel_hash = hashlib.sha256(img.tobytes()).hexdigest()[:16]
             if (
-                self.cache.get_pixel_hash(source, width, height, fit) == pixel_hash
-                and self.cache.get(source, width, height, fit) is not None
+                self.cache.get_pixel_hash(source, width, height, fit, colour_scheme) == pixel_hash
+                and self.cache.get(source, width, height, fit, colour_scheme) is not None
             ):
                 log_duration(
                     "Skipped image preprocessing",
@@ -133,12 +187,13 @@ class ImagePipeline:
                     width=width,
                     height=height,
                     fit=fit,
+                    scheme=colour_scheme,
                     reason="unchanged",
                 )
                 return
 
-        data = self.convert_image(img, width, height, fit)
-        self.cache.set(source, width, height, fit, data, pixel_hash=pixel_hash)
+        data = self.convert_image(img, width, height, fit, colour_scheme)
+        self.cache.set(source, width, height, fit, colour_scheme, data, pixel_hash=pixel_hash)
         log_duration(
             "Prepared cached image",
             started,
@@ -147,6 +202,7 @@ class ImagePipeline:
             width=width,
             height=height,
             fit=fit,
+            scheme=colour_scheme,
             type=source_type,
             bytes=len(data),
         )
@@ -173,12 +229,13 @@ class ImagePipeline:
         width: int,
         height: int,
         fit: str,
+        colour_scheme: int,
         source_type: str,
     ) -> PreprocessScheduleResult:
-        cache_key = self.cache_key(source, width, height, fit)
+        cache_key = self.cache_key(source, width, height, fit, colour_scheme)
         is_remote_source = source_type == "url" or is_url(source)
 
-        if not is_remote_source and self.cache.get(source, width, height, fit) is not None:
+        if not is_remote_source and self.cache.get(source, width, height, fit, colour_scheme) is not None:
             return PreprocessScheduleResult.ALREADY_CACHED
 
         with self.state.preprocess_lock:
@@ -187,11 +244,12 @@ class ImagePipeline:
                 return PreprocessScheduleResult.ALREADY_ACTIVE
 
             LOGGER.info(
-                "Queued image preprocessing for %s (%dx%d fit=%s type=%s)",
+                "Queued image preprocessing for %s (%dx%d fit=%s scheme=%s type=%s)",
                 log_source(source),
                 width,
                 height,
                 fit,
+                colour_scheme,
                 source_type,
             )
             future = self.state.preprocess_executor.submit(
@@ -200,6 +258,7 @@ class ImagePipeline:
                 width,
                 height,
                 fit,
+                colour_scheme,
                 source_type,
             )
             self.state.preprocess_tasks[cache_key] = future

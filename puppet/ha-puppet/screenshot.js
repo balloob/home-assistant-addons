@@ -326,6 +326,10 @@ export class Browser {
     });
     const page = await browser.newPage();
 
+    await page.emulateMediaFeatures([
+      {name: 'prefers-reduced-motion', value: 'reduce'},
+    ]);
+
     // Route all log messages from browser to our add-on log
     // https://pptr.dev/api/puppeteer.pageevents
     page

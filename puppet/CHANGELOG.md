@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.1
+
+- Emulate `prefers-reduced-motion` to disable animations while capturing screenshots
+
 ## 2.5.0
 
 - Allow setting height to `auto` in viewport string (`viewport=1000xauto`)

@@ -14,19 +14,15 @@
 # RUN apk add --no-cache nodejs npm || echo "Node.js already installed"
 
 
-FROM debian:bullseye-slim
+FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
 RUN apt-get update && apt-get install -y \
     chromium \
-    curl \
     fonts-noto-cjk \
     fonts-noto-color-emoji \
-    && curl -fsSL https://deb.nodesource.com/setup_23.x -o nodesource_setup.sh \
-    && bash nodesource_setup.sh \
-    && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -50,4 +46,3 @@ COPY ha-puppet/ .
 
 # Run the application
 CMD ["node", "http.js"]
-

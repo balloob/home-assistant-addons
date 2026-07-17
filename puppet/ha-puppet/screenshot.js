@@ -569,10 +569,15 @@ export class Browser {
         defaultWait += 1000;
       }
 
-      // Update theme and dark mode
+      // Update theme and dark mode, but only when the request asked for
+      // them. The frontend persists every settheme dispatch to the token
+      // user's profile and syncs it to their real web and mobile sessions,
+      // so dispatching defaults for an unthemed request permanently flips
+      // that user's own theme (e.g. dark -> light) on every fresh browser.
       if (
-        theme !== this.lastRequestedTheme ||
-        dark !== this.lastRequestedDarkMode
+        (theme !== undefined || dark !== undefined) &&
+        (theme !== this.lastRequestedTheme ||
+          dark !== this.lastRequestedDarkMode)
       ) {
         await page.evaluate(
           ({ theme, dark }) => {
@@ -582,7 +587,7 @@ export class Browser {
               }),
             );
           },
-          { theme: theme || "", dark },
+          { theme: theme || "", dark: dark ?? false },
         );
         this.lastRequestedTheme = theme;
         this.lastRequestedDarkMode = dark;

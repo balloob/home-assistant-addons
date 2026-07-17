@@ -569,10 +569,10 @@ export class Browser {
         defaultWait += 1000;
       }
 
-      // Update theme and dark mode
       if (
-        theme !== this.lastRequestedTheme ||
-        dark !== this.lastRequestedDarkMode
+        (theme !== undefined || dark !== undefined) &&
+        (theme !== this.lastRequestedTheme ||
+          dark !== this.lastRequestedDarkMode)
       ) {
         await page.evaluate(
           ({ theme, dark }) => {
@@ -582,7 +582,7 @@ export class Browser {
               }),
             );
           },
-          { theme: theme || "", dark },
+          { theme: theme || "", dark: dark ?? false },
         );
         this.lastRequestedTheme = theme;
         this.lastRequestedDarkMode = dark;

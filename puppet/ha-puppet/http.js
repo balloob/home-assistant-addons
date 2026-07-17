@@ -262,7 +262,8 @@ class RequestHandler {
 
       const lang = requestUrl.searchParams.get("lang") || undefined;
       const theme = requestUrl.searchParams.get("theme") || undefined;
-      const dark = requestUrl.searchParams.has("dark");
+      // undefined means "not requested": when neither dark nor theme is given
+      const dark = requestUrl.searchParams.has("dark") ? true : undefined;
 
       // Dithering algorithm
       // Use device config as default if available

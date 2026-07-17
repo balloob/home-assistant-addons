@@ -262,9 +262,7 @@ class RequestHandler {
 
       const lang = requestUrl.searchParams.get("lang") || undefined;
       const theme = requestUrl.searchParams.get("theme") || undefined;
-      // undefined means "not requested": when neither dark nor theme is
-      // given, screenshot.js skips the settheme dispatch so the token
-      // user's own theme is left untouched.
+      // undefined means "not requested": when neither dark nor theme is given
       const dark = requestUrl.searchParams.has("dark") ? true : undefined;
 
       // Dithering algorithm

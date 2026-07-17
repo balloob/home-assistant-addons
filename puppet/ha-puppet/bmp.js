@@ -9,12 +9,15 @@ export class BMPEncoder {
       throw new Error(`Unsupported bits per pixel. Supported values are: ${supportedBitsPerPixel.join(", ")}`);
     }
 
-    let padding = (this.width * (this.bitsPerPixel / 8)) % 4;
+    // Bytes of actual pixel data per row (whole bytes, so 1bpp rows round up)
+    this.rowBytes = Math.ceil((this.width * this.bitsPerPixel) / 8);
+    // BMP rows are padded to a multiple of 4 bytes
+    let padding = this.rowBytes % 4;
     if (padding > 0) {
       padding = 4 - padding;
     }
     this.padding = padding;
-    this.paddedWidthBytes = Math.ceil(this.width * (this.bitsPerPixel / 8)) + padding;
+    this.paddedWidthBytes = this.rowBytes + padding;
   };
 
   encode(data) {
@@ -45,7 +48,7 @@ export class BMPEncoder {
     header.writeUInt32LE(headerSize, 10);
     header.writeUInt32LE(40, 14);
     header.writeInt32LE(this.width, 18);
-    header.writeInt32LE(this.height, 22); // Negative height for top-down DIB
+    header.writeInt32LE(this.height, 22); // Positive height: bottom-up DIB
     header.writeUInt16LE(1, 26); // Number of color planes
     header.writeUInt16LE(this.bitsPerPixel, 28); // Bits per pixel
     header.writeUInt32LE(0, 30); // Compression (none)
@@ -85,30 +88,27 @@ export class BMPEncoder {
 
   createPixelData(imageData) {
     let offset = 0;
+    // Buffer.alloc zero-fills, so row padding bytes are already 0
     const pixelData = Buffer.alloc(this.height * this.paddedWidthBytes);
 
     if (this.bitsPerPixel === 1) {
       for (let y = 0; y < this.height; y++) {
+        const rowOffset = (this.height - 1 - y) * this.paddedWidthBytes;
         for (let x = 0; x < this.width; x++) {
-          const pixel = imageData[y * this.width + x];
-          const byteIndex = ((this.height - 1 - y) * this.paddedWidthBytes + Math.floor(x / 8));
-          const bitIndex = x % 8;
-          const currentByte = pixelData.readUInt8(byteIndex);
-          if (pixel == 0xFF) {
-            pixelData.writeUInt8(currentByte | (1 << (7 - bitIndex)), byteIndex);
-          } else {
-            pixelData.writeUInt8(currentByte & ~(1 << (7 - bitIndex)), byteIndex);
+          if (imageData[y * this.width + x] === 0xFF) {
+            const byteIndex = rowOffset + Math.floor(x / 8);
+            pixelData.writeUInt8(
+              pixelData.readUInt8(byteIndex) | (1 << (7 - (x % 8))),
+              byteIndex,
+            );
           }
-        }
-        offset += Math.ceil(this.width / 8);
-        for (let p = 0; p < this.padding; p++) {
-          pixelData.writeUInt8(0, offset++);
         }
       }
     } else if (this.bitsPerPixel === 24) {
+      // Source is raw RGB with a stride of width * 3 (no padding)
       for (let y = this.height - 1; y >= 0; y--) {
         for (let x = 0; x < this.width; x++) {
-          const sourceIndex = (y * this.paddedWidthBytes) + (x * 3);
+          const sourceIndex = (y * this.width + x) * 3;
           const r = imageData[sourceIndex];
           const g = imageData[sourceIndex + 1];
           const b = imageData[sourceIndex + 2];
@@ -116,22 +116,15 @@ export class BMPEncoder {
           pixelData.writeUInt8(g, offset++);
           pixelData.writeUInt8(r, offset++);
         }
-        for (let p = 0; p < this.padding; p++) {
-          pixelData.writeUInt8(0, offset++);
-        }
+        offset += this.padding;
       }
-    }
-
-    else if (this.bitsPerPixel === 8) {
+    } else if (this.bitsPerPixel === 8) {
       for (let y = this.height - 1; y >= 0; y--) {
         for (let x = 0; x < this.width; x++) {
-          const pixel = imageData[y * this.width + x];
           // Expect single-channel grayscale (0-255)
-          pixelData.writeUInt8(pixel, offset++);
+          pixelData.writeUInt8(imageData[y * this.width + x], offset++);
         }
-        for (let p = 0; p < this.padding; p++) {
-          pixelData.writeUInt8(0, offset++);
-        }
+        offset += this.padding;
       }
     }
 

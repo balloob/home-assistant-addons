@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Puppet - Screenshot Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/tailwind.css" />
     <style>
       :root {
         --ha-blue: #03a9f4;
@@ -1008,6 +1008,9 @@
               document.getElementById("colors").value = "000000,FFFFFF";
               console.log('[eink migration] Imported URL with eink=2, converted to colors=000000,FFFFFF');
               feedback.textContent = "⚠ Imported URL contained deprecated 'eink' parameter. Automatically converted to 'colors' parameter.";
+              feedback.classList.remove("hidden");
+            } else {
+              feedback.textContent = `⚠ Imported URL contained the removed 'eink=${einkValue}' parameter, which was ignored. Set the desired palette via the 'colors' field instead.`;
               feedback.classList.remove("hidden");
             }
           } else if (urlParams.has("colors")) {

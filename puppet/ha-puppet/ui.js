@@ -17,25 +17,24 @@ async function fetchHomeAssistantData() {
     const auth = createLongLivedTokenAuth(hassUrl, hassToken);
     const connection = await createConnection({ auth });
 
-    // Fetch themes and network URLs via WebSocket
-    const [themesResult, networkResult] = await Promise.all([
+    // Fetch themes and network URLs via WebSocket, and config (for the
+    // language) via the REST API, all in parallel
+    const [themesResult, networkResult, configResponse] = await Promise.all([
       connection.sendMessagePromise({
         type: "frontend/get_themes",
       }),
       connection.sendMessagePromise({
         type: "network/url",
       }),
+      fetch(`${hassUrl}/api/config`, {
+        headers: {
+          Authorization: `Bearer ${hassToken}`,
+          "Content-Type": "application/json",
+        },
+      }),
     ]);
 
     connection.close();
-
-    // Fetch config via REST API to get language
-    const configResponse = await fetch(`${hassUrl}/api/config`, {
-      headers: {
-        Authorization: `Bearer ${hassToken}`,
-        "Content-Type": "application/json",
-      },
-    });
 
     const config = configResponse.ok ? await configResponse.json() : null;
 
@@ -151,8 +150,11 @@ export async function handleUIRequest(response) {
     let html = await readFile(htmlPath, "utf-8");
 
     // Inject window.hass and window.devices data into the HTML (pretty formatted)
-    const hassScriptTag = `<script>window.hass = ${JSON.stringify(hassData, null, 2)};</script>`;
-    const devicesScriptTag = `<script>window.devices = ${JSON.stringify(devicesData, null, 2)};</script>`;
+    // Escape "<" so data (e.g. a theme name) can't break out of the script tag
+    const asScriptJson = (data) =>
+      JSON.stringify(data, null, 2).replace(/</g, "\\u003c");
+    const hassScriptTag = `<script>window.hass = ${asScriptJson(hassData)};</script>`;
+    const devicesScriptTag = `<script>window.devices = ${asScriptJson(devicesData)};</script>`;
     html = html.replace("</head>", `${hassScriptTag}\n  ${devicesScriptTag}\n  </head>`);
 
     response.writeHead(200, {

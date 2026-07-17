@@ -1,4 +1,5 @@
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import { Browser } from "./screenshot.js";
 import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
@@ -12,6 +13,17 @@ const MAX_NEXT_REQUESTS = 100;
 // whitespace; taller content still renders and is captured via the clip.
 const AUTO_RENDER_HEIGHT = 800;
 const BROWSER_TIMEOUT = 30_000; // Timeout for browser inactivity in milliseconds
+
+// Static Tailwind build used by the UI and error pages (vendored so the UI
+// works without internet access)
+const tailwindCss = readFileSync(
+  new URL("./html/tailwind.css", import.meta.url),
+);
+// Viewport bounds (px). An unbounded viewport lets a single request OOM
+// Chromium on small hosts.
+const MIN_VIEWPORT_DIM = 10;
+const MAX_VIEWPORT_DIM = 4000;
+const MAX_ZOOM = 10;
 
 class RequestHandler {
   constructor(browser) {
@@ -72,6 +84,15 @@ class RequestHandler {
     if (requestUrl.pathname === "/favicon.ico") {
       response.statusCode = 404;
       response.end();
+      return;
+    }
+
+    if (requestUrl.pathname === "/tailwind.css") {
+      response.writeHead(200, {
+        "Content-Type": "text/css",
+        "Content-Length": tailwindCss.length,
+      });
+      response.end(tailwindCss);
       return;
     }
 
@@ -144,6 +165,18 @@ class RequestHandler {
         return;
       }
 
+      if (
+        !viewportParams.every(
+          (x) => x >= MIN_VIEWPORT_DIM && x <= MAX_VIEWPORT_DIM,
+        )
+      ) {
+        response.statusCode = 400;
+        response.end(
+          `Viewport dimensions must be between ${MIN_VIEWPORT_DIM} and ${MAX_VIEWPORT_DIM} pixels`,
+        );
+        return;
+      }
+
       let einkColors = parseInt(requestUrl.searchParams.get("eink"));
       if (isNaN(einkColors) || einkColors < 2) {
         einkColors = undefined;
@@ -188,6 +221,14 @@ class RequestHandler {
           // colors parameter takes precedence - ignore eink
           console.warn('[eink ignored] Both "eink" and "colors" parameters provided. Using "colors" and ignoring "eink".');
           einkColors = undefined;
+        } else {
+          // Other palette sizes are no longer supported; fail loudly instead
+          // of silently returning a full-color screenshot.
+          response.statusCode = 400;
+          response.end(
+            `The "eink=${einkColors}" parameter is no longer supported. Use "colors" with a comma-separated list of hex colors instead, e.g. colors=000000,555555,AAAAAA,FFFFFF`,
+          );
+          return;
         }
       }
 
@@ -197,7 +238,7 @@ class RequestHandler {
       }
 
       let zoom = parseFloat(requestUrl.searchParams.get("zoom"));
-      if (isNaN(zoom) || zoom <= 0) {
+      if (isNaN(zoom) || zoom <= 0 || zoom > MAX_ZOOM) {
         zoom = 1;
       }
 
@@ -266,11 +307,18 @@ class RequestHandler {
         next = undefined;
       }
 
-      // We removed error handling on this block so the add-on crashes and watchdog recovers
       let image;
-      let navigateResult = null;
       try {
-        navigateResult = await this.browser.navigatePage(requestParams);
+        const navigateResult = await this.browser.navigatePage(requestParams);
+        console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
+        this.navigationTime = Math.max(
+          this.navigationTime,
+          navigateResult.time,
+        );
+        const screenshotResult =
+          await this.browser.screenshotPage(requestParams);
+        console.debug(requestId, `Screenshot in ${screenshotResult.time} ms`);
+        image = screenshotResult.image;
       } catch (err) {
         if (err instanceof CannotOpenPageError) {
           console.error(requestId, `Cannot open page: ${err.message}`);
@@ -278,13 +326,13 @@ class RequestHandler {
           response.end(`Cannot open page: ${err.message}`);
           return;
         }
+        // Unknown error: we let it propagate so the add-on crashes and the
+        // watchdog recovers, but end the response first so the client isn't
+        // left hanging until a TCP timeout.
+        response.statusCode = 500;
+        response.end("Internal error taking screenshot");
         throw err;
       }
-      console.debug(requestId, `Navigated in ${navigateResult.time} ms`);
-      this.navigationTime = Math.max(this.navigationTime, navigateResult.time);
-      const screenshotResult = await this.browser.screenshotPage(requestParams);
-      console.debug(requestId, `Screenshot in ${screenshotResult.time} ms`);
-      image = screenshotResult.image;
 
       // If eink processing happened, the format could be png or bmp
       const responseFormat = format;
@@ -326,12 +374,16 @@ class RequestHandler {
         return;
       }
       console.debug(requestId, `Next request in ${nextWaitTime} ms`);
-      this.nextRequests.push(
-        setTimeout(
-          () => this.prepareNextRequest(requestId, requestParams),
-          nextWaitTime,
-        ),
-      );
+      const timer = setTimeout(() => {
+        // Remove ourselves from the pending list once fired, so the cap below
+        // only ever cancels timers that are still pending.
+        const idx = this.nextRequests.indexOf(timer);
+        if (idx !== -1) {
+          this.nextRequests.splice(idx, 1);
+        }
+        this.prepareNextRequest(requestId, requestParams);
+      }, nextWaitTime);
+      this.nextRequests.push(timer);
       if (this.nextRequests.length > MAX_NEXT_REQUESTS) {
         clearTimeout(this.nextRequests.shift());
       }

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.6.0
+
+- Fix corrupted 24-bit BMP output for viewport widths not divisible by 4
+- Fix crash generating 1-bit BMP output for viewport widths not divisible by 8
+- Fix scheduled `next` preloads rendering at an increasingly wrong viewport height
+- Fix repeated requests being slow after an invalid-authentication error (state is now reset so the next request does a full page load)
+- The deprecated `eink` parameter now returns a 400 error for values other than 2 instead of silently returning a full-color screenshot (`eink=2` is still converted to `colors=000000,FFFFFF`)
+- Validate viewport dimensions (10-4000 px) and zoom (max 10) to prevent a single request from exhausting memory
+- Skip image re-encoding for plain PNG screenshots without rotate/invert/colors, speeding up the most common request
+- Speed up dithering with a palette lookup cache
+- The web UI no longer loads Tailwind from a CDN and now works without internet access
+- Return a 500 response instead of leaving the client hanging when a screenshot fails unexpectedly
+- Mask the access token in the add-on configuration UI
+- Run the container with Docker's default init so defunct Chromium processes are reaped
+
 ## 2.5.1
 
 - Emulate `prefers-reduced-motion` to disable animations while capturing screenshots

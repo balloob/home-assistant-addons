@@ -1,9 +1,8 @@
 name: "Puppet"
 description: "Turn dashboards into nice pictures"
-version: "2.5.1"
+version: "2.6.0"
 slug: "puppet"
 homeassistant_api: true
-init: false
 arch:
   - aarch64
   - amd64
@@ -15,6 +14,6 @@ options:
   keep_browser_open: false
   home_assistant_url: "http://homeassistant:8123"
 schema:
-  access_token: str
+  access_token: password
   keep_browser_open: bool
   home_assistant_url: str

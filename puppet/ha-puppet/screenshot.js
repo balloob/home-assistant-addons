@@ -28,9 +28,21 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
     return [r, g, b];
   }) : rgbPalette;
 
+  // Cache palette lookups: error diffusion revisits the same colors
+  // constantly, and a Map hit is much cheaper than a palette scan per pixel.
+  const lookupCache = new Map();
+
   // Function to find the closest color in the quantization palette
   // Returns the index (which maps to both quantization and output palette)
   function findClosestColorIndex(r, g, b) {
+    // r/g/b can be floats from the error-diffusion buffer; round for the key
+    const key =
+      (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+    const cached = lookupCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
     let minDistanceSq = Infinity;
     let closestIndex = 0;
 
@@ -51,6 +63,7 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
       }
     }
 
+    lookupCache.set(key, closestIndex);
     return closestIndex;
   }
 
@@ -278,6 +291,15 @@ export class Browser {
     this.lastRequestedDarkMode = undefined;
   }
 
+  // Forget what state the page is in, forcing a full page navigation (and
+  // re-applying language/theme) on the next request.
+  _resetPageState() {
+    this.lastRequestedPath = undefined;
+    this.lastRequestedLang = undefined;
+    this.lastRequestedTheme = undefined;
+    this.lastRequestedDarkMode = undefined;
+  }
+
   async cleanup() {
     const { browser, page } = this;
 
@@ -287,10 +309,7 @@ export class Browser {
 
     this.page = undefined;
     this.browser = undefined;
-    this.lastRequestedPath = undefined;
-    this.lastRequestedLang = undefined;
-    this.lastRequestedTheme = undefined;
-    this.lastRequestedDarkMode = undefined;
+    this._resetPageState();
 
     try {
       if (page) {
@@ -386,16 +405,21 @@ export class Browser {
 
       // We add 56px to the height to account for the header
       // We'll cut that off from the screenshot
-      viewport.height += headerHeight;
+      // (Local copy: `viewport` is reused for the screenshot clip and by
+      // scheduled "next" preloads, so it must not be mutated here.)
+      const renderViewport = {
+        width: viewport.width,
+        height: viewport.height + headerHeight,
+      };
 
       const curViewport = page.viewport();
 
       if (
         !curViewport ||
-        curViewport.width !== viewport.width ||
-        curViewport.height !== viewport.height
+        curViewport.width !== renderViewport.width ||
+        curViewport.height !== renderViewport.height
       ) {
-        await page.setViewport(viewport);
+        await page.setViewport(renderViewport);
       }
 
       let defaultWait = isAddOn ? 750 : 500;
@@ -432,10 +456,12 @@ export class Browser {
         // Open the HA UI
         const pageUrl = new URL(pagePath, this.homeAssistantUrl).toString();
         const response = await page.goto(pageUrl);
-        if (!response.ok()) {
-          throw new CannotOpenPageError(response.status(), pageUrl);
+        if (!response || !response.ok()) {
+          throw new CannotOpenPageError(response ? response.status() : 502, pageUrl);
         }
-        page.removeScriptToEvaluateOnNewDocument(evaluateIdentifier.identifier);
+        await page.removeScriptToEvaluateOnNewDocument(
+          evaluateIdentifier.identifier,
+        );
 
         // Launching browser is slow inside the add-on, give it extra time
         if (isAddOn) {
@@ -574,6 +600,11 @@ export class Browser {
 
       const end = Date.now();
       return { time: end - start };
+    } catch (err) {
+      // The page may be in an unknown state (e.g. stuck on the login screen);
+      // force a full navigation on the next request.
+      this._resetPageState();
+      throw err;
     } finally {
       this.busy = false;
     }
@@ -591,13 +622,14 @@ export class Browser {
     try {
       const page = await this.getPage();
 
-      // Default: clip to the viewport (minus the cropped header). With
+      // Default: clip to the requested viewport (the page is rendered
+      // headerHeight taller and the header cropped off via the clip's y). With
       // autoHeight (a "WIDTHxauto" viewport), clip to the document's full scroll
       // height instead so a dashboard that extends below the fold is captured in
       // one shot — still cropping the header, and capped at MAX_AUTO_HEIGHT so a
       // very long page can't run away. (Puppeteer renders beyond the viewport
       // for the taller clip.)
-      let clipHeight = viewport.height - headerHeight;
+      let clipHeight = viewport.height;
       if (autoHeight) {
         const scrollHeight = await page.evaluate(
           () => document.documentElement.scrollHeight,
@@ -617,6 +649,21 @@ export class Browser {
           height: clipHeight,
         },
       });
+
+      // Fast path: Puppeteer already produced a PNG, so if no image
+      // processing is requested we can skip the sharp decode/re-encode.
+      if (
+        format === "png" &&
+        !rotate &&
+        !invert &&
+        !(colors && colors.length > 0)
+      ) {
+        const end = Date.now();
+        return {
+          image,
+          time: end - start,
+        };
+      }
 
       let sharpInstance = sharp(image);
 
@@ -698,7 +745,7 @@ export class Browser {
       };
     } catch (err) {
       // trigger a full page navigation on next request
-      this.lastRequestedPath = undefined;
+      this._resetPageState();
       throw err;
     } finally {
       this.busy = false;

@@ -1,19 +1,3 @@
-# ARG BUILD_FROM
-# FROM $BUILD_FROM
-
-# # Install Chromium
-# RUN apk add --no-cache \
-#   chromium \
-#   nss \
-#   freetype \
-#   harfbuzz \
-#   ca-certificates \
-#   ttf-freefont
-
-# # Ensure Node.js and npm are installed (for Alpine-based images)
-# RUN apk add --no-cache nodejs npm || echo "Node.js already installed"
-
-
 FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -36,13 +20,10 @@ COPY ha-puppet/package*.json ./
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Ensure a clean state before installing
-RUN npm ci --unsafe-perm
+RUN npm ci --omit=dev
 
 # Copy the rest of the project files
 COPY ha-puppet/ .
-
-# Set Puppeteer to use Alpine Chromium
-# ENV PUPPETEER_EXECUTABLE_PATH="/usr/bin/chromium"
 
 # Run the application
 CMD ["node", "http.js"]

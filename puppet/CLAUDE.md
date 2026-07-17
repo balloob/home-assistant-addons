@@ -14,13 +14,17 @@ puppet/
 ├── Dockerfile              # Container definition
 ├── ha-puppet/              # Main application
 │   ├── http.js            # HTTP server & request handling
-│   ├── screenshot.js      # Browser automation & screenshot logic
+│   ├── screenshot.js      # Browser automation, dithering & screenshot logic
 │   ├── ui.js              # Web UI server-side rendering
-│   ├── bmp.js             # BMP image encoding
+│   ├── bmp.js             # BMP image encoding (1/8/24-bit)
+│   ├── devices.js         # Device preset lookup (devices.json)
+│   ├── devices.json       # Predefined device configurations + aliases
 │   ├── error.js           # Custom error classes
 │   ├── const.js           # Configuration constants
+│   ├── test_bmp.mjs       # BMP encoder tests (node test_bmp.mjs)
 │   └── html/
 │       ├── index.html     # Interactive Web UI
+│       ├── tailwind.css   # Static Tailwind build (npm run build:css)
 │       ├── error_missing_config.html
 │       └── error_connection_failed.html
 ```
@@ -29,13 +33,14 @@ puppet/
 
 **Backend:**
 - Node.js
-- Puppeteer v24.26.1 - Headless Chrome automation
-- home-assistant-js-websocket v9.4.0 - HA WebSocket communication
-- Sharp v0.34.4 - Image processing
+- Puppeteer - Headless Chrome automation (system Chromium in the add-on)
+- home-assistant-js-websocket - HA WebSocket communication
+- Sharp - Image processing
+- (versions: see `ha-puppet/package.json`)
 
 **Frontend:**
 - Vanilla JavaScript (no frameworks)
-- Tailwind CSS (via CDN)
+- Tailwind CSS (static build vendored at `html/tailwind.css`, served at `/tailwind.css`; regenerate with `npm run build:css` after changing HTML)
 - localStorage for state persistence
 
 ## Core Functionality
@@ -86,12 +91,13 @@ Manages Puppeteer browser instance and screenshot generation.
 - Returns navigation timing
 
 `screenshotPage(viewport, options)`
-- Takes Puppeteer screenshot with clipping (removes 56px header)
-- Processes image with Sharp:
+- Takes Puppeteer screenshot with clipping (removes 56px header, scaled by zoom)
+- Fast path: plain PNG without rotate/invert/colors is returned as-is (no Sharp re-encode)
+- Otherwise processes image with Sharp:
   - Rotation (90°, 180°, 270°)
-  - E-ink color reduction (2, 4, 7, 16 colors)
+  - Palette reduction with optional error-diffusion dithering (`colors`, `palette_colors`, `dithering`)
   - Color inversion
-  - Format conversion (PNG, JPEG, WebP, BMP)
+  - Format conversion (PNG, JPEG, WebP, BMP — BMP as 24-bit color, 8-bit grayscale, or 1-bit binary via `bmp_mode`)
 - Returns image buffer
 
 ### 3. Web UI (`ui.js`)
@@ -118,16 +124,20 @@ Manages Puppeteer browser instance and screenshot generation.
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
+| device | string | Predefined device preset from devices.json | (empty) |
 | path | string | HA page path | `/` |
 | width | number | Viewport width (100-4000px) | 1000 |
-| height | number | Viewport height (100-4000px) | 1000 |
+| height | number/`auto` | Viewport height (100-4000px), or `auto` for full page height | 1000 |
 | format | string | Output format (png, jpeg, webp, bmp) | `png` |
+| bmp_mode | string | BMP encoding (color, grayscale, binary) | `color` |
 | theme | string | HA theme name | (empty) |
 | dark | boolean | Enable dark mode | false |
-| zoom | number | Zoom level (0.1-5.0) | 1.0 |
+| zoom | number | Zoom level | 1.0 |
 | wait | number | Extra wait time in ms | 0 |
 | lang | string | Language code (e.g., en, nl) | (empty) |
-| eink | number | E-ink color palette (2, 4, 7, 16) | (empty) |
+| colors | string | Comma-separated hex output palette (e.g. 000000,FFFFFF) | (empty) |
+| palette_colors | string | Quantization palette matched before mapping to `colors` | (empty) |
+| dithering | string | Dithering algorithm (none, floyd-steinberg, atkinson, jarvis-judice-ninke, stucki, burkes, sierra, sierra-lite) | `none` |
 | rotate | number | Rotation degrees (90, 180, 270) | (empty) |
 | invert | boolean | Invert colors | false |
 | next | number | Auto-refresh interval in seconds | (empty) |
@@ -218,10 +228,12 @@ Manages Puppeteer browser instance and screenshot generation.
 3. **Request Queuing**: Prevents concurrent browser operations
 4. **Navigation Optimization**: Uses `history.replaceState` + custom event vs full reload
 5. **Preloading**: `next` parameter warms up browser before fetch
-6. **Custom Wait Times**:
+6. **PNG Fast Path**: Plain PNG requests (no rotate/invert/colors) skip the Sharp re-encode
+7. **Dithering Cache**: Palette lookups are memoized per image
+8. **Custom Wait Times**:
    - 750ms default (add-on)
    - 500ms for local dev
-   - +2.5s extra on cold start for icons/images
+   - +2s extra on cold start for icons/images
 
 ## Authentication
 
@@ -233,13 +245,14 @@ Uses Home Assistant long-lived access tokens:
 ## E-ink Display Support
 
 **Color Reduction:**
-- Threshold-based palette reduction
-- Supported palettes: 2, 4, 7, 16, 256 colors
-- Custom BMP encoder (`bmp.js`) for 1-bit and 24-bit formats
+- Custom palette via `colors` (comma-separated hex), optionally with `palette_colors` for quantization matching and `dithering` for error-diffusion algorithms
+- Legacy `eink` parameter: `eink=2` is auto-converted to `colors=000000,FFFFFF`; any other value returns HTTP 400
+- Device presets in `devices.json` bundle width/height/colors/palette_colors/dithering (selected with `device=<name>`, aliases supported)
+- Custom BMP encoder (`bmp.js`) for 1-bit, 8-bit grayscale, and 24-bit formats (`bmp_mode`)
 
 **Recommended Settings:**
 ```
-?viewport=800x600&eink=2&invert&format=bmp
+?viewport=800x600&colors=000000,FFFFFF&dithering=atkinson&invert&format=bmp
 ```
 
 ## API Endpoints
@@ -251,22 +264,30 @@ Returns interactive Web UI
 Returns screenshot of Home Assistant page
 
 **Query Parameters:**
-- `viewport={width}x{height}` (required)
+- `viewport={width}x{height}` (required unless `device` given; height may be `auto`; dimensions clamped to 10-4000)
+- `device={name}` (optional, preset from devices.json supplying viewport/colors/palette_colors/dithering defaults)
 - `format={png|jpeg|webp|bmp}` (optional, default: png)
+- `bmp_mode={color|grayscale|binary}` (optional, default: color)
 - `theme={theme_name}` (optional)
 - `dark` (optional, flag)
-- `zoom={number}` (optional, 0.1-5.0)
+- `zoom={number}` (optional, max 10)
 - `wait={milliseconds}` (optional)
 - `lang={code}` (optional)
-- `eink={colors}` (optional, 2-256)
+- `colors={hex,hex,...}` (optional, output palette; enables dithering pipeline)
+- `palette_colors={hex,hex,...}` (optional, quantization palette; must match `colors` length)
+- `dithering={algorithm}` (optional, default: none)
 - `rotate={degrees}` (optional, 90/180/270)
 - `invert` (optional, flag)
 - `next={seconds}` (optional, preload interval)
+- `eink` (deprecated: `eink=2` converted to black/white `colors`; other values return 400)
 
 **Example:**
 ```
 GET /home?viewport=1000x600&format=png&theme=midnight&dark&zoom=1.2
 ```
+
+### GET /tailwind.css
+Static Tailwind CSS build used by the UI and error pages
 
 ## Error Handling
 
@@ -292,19 +313,16 @@ home_assistant_url: "http://homeassistant:8123"  # HA base URL
 ## Development
 
 **Local Development:**
-1. Copy `options-dev.json.example` to `options-dev.json`
+1. Copy `options-dev.json.sample` to `options-dev.json`
 2. Add your access token
 3. Run: `npm install && node http.js`
 4. Access UI: `http://localhost:10000/`
 
-**Dependencies:**
-```json
-{
-  "puppeteer": "24.26.1",
-  "home-assistant-js-websocket": "9.4.0",
-  "sharp": "0.34.4"
-}
-```
+**Tests:**
+- BMP encoder: `node test_bmp.mjs` (assertion-based; also writes sample .bmp files)
+
+**After changing HTML/Tailwind classes:**
+- Regenerate the static CSS: `npm run build:css`
 
 ## Security Considerations
 

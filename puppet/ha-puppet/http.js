@@ -5,6 +5,7 @@ import { isAddOn, hassUrl, hassToken, keepBrowserOpen } from "./const.js";
 import { CannotOpenPageError } from "./error.js";
 import { handleUIRequest } from "./ui.js";
 import { loadDevicesConfig, getDeviceConfig } from "./devices.js";
+import { installShutdownHandlers } from "./shutdown.js";
 
 // Maximum number of next requests to keep in memory
 const MAX_NEXT_REQUESTS = 100;
@@ -429,6 +430,7 @@ const server = http.createServer((request, response) =>
   requestHandler.handleRequest(request, response),
 );
 server.listen(port);
+installShutdownHandlers(server, browser);
 const now = new Date();
 const serverUrl = isAddOn
   ? `http://homeassistant.local:${port}`

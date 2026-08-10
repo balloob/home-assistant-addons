@@ -12,6 +12,17 @@ export function installShutdownHandlers(
 ) {
   let shuttingDown = false;
 
+  const closeServer = () =>
+    new Promise((resolve, reject) => {
+      server.close((err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
+
   const shutdown = async (signal) => {
     if (shuttingDown) {
       return;
@@ -26,8 +37,8 @@ export function installShutdownHandlers(
     forceExitTimer.unref?.();
 
     try {
-      server.close();
-      await browser.cleanup();
+      await closeServer();
+      await browser.cleanup({ throwOnError: true });
     } catch (err) {
       clearTimer(forceExitTimer);
       logger.error("Error during shutdown:", err);

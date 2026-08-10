@@ -300,7 +300,7 @@ export class Browser {
     this.lastRequestedDarkMode = undefined;
   }
 
-  async cleanup() {
+  async cleanup({ throwOnError = false } = {}) {
     const { browser, page } = this;
 
     if (!this.browser && !this.page) {
@@ -311,12 +311,15 @@ export class Browser {
     this.browser = undefined;
     this._resetPageState();
 
+    const errors = [];
+
     try {
       if (page) {
         await page.close();
       }
     } catch (err) {
       console.error("Error closing page during cleanup:", err);
+      errors.push(err);
     }
 
     try {
@@ -325,9 +328,13 @@ export class Browser {
       }
     } catch (err) {
       console.error("Error closing browser during cleanup:", err);
+      errors.push(err);
     }
 
     console.log("Closed browser");
+    if (throwOnError && errors.length > 0) {
+      throw new AggregateError(errors, "Browser cleanup failed");
+    }
   }
 
   async getPage() {

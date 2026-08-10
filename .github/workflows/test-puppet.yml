@@ -1,0 +1,51 @@
+name: Test Puppet
+
+on:
+  pull_request:
+    paths:
+      - "puppet/ha-puppet/http.js"
+      - "puppet/ha-puppet/screenshot.js"
+      - "puppet/ha-puppet/shutdown.js"
+      - "puppet/ha-puppet/test_shutdown.mjs"
+      - "puppet/ha-puppet/package.json"
+      - "puppet/ha-puppet/package-lock.json"
+      - ".github/workflows/test-puppet.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "puppet/ha-puppet/http.js"
+      - "puppet/ha-puppet/screenshot.js"
+      - "puppet/ha-puppet/shutdown.js"
+      - "puppet/ha-puppet/test_shutdown.mjs"
+      - "puppet/ha-puppet/package.json"
+      - "puppet/ha-puppet/package-lock.json"
+      - ".github/workflows/test-puppet.yml"
+
+jobs:
+  test:
+    name: Node tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: puppet/ha-puppet
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: puppet/ha-puppet/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: |
+          cp options-dev.json.sample options-dev.json
+          node --test test_shutdown.mjs

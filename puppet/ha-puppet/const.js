@@ -10,7 +10,8 @@ if (!optionsFile) {
   );
   process.exit(1);
 }
-export const isAddOn = optionsFile === "/data/options.json";
+// If `homeassistant_api: true` is removed from config.yaml then this detection will stop working
+export const isAddOn = process.env.SUPERVISOR_TOKEN !== undefined;
 const options = JSON.parse(readFileSync(optionsFile));
 
 export const hassUrl = isAddOn

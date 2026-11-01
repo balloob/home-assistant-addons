@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.1
+
+- Requests without `theme` or `dark` no longer change the access token user's theme; previously every such screenshot switched that user's Home Assistant UI to light mode
+- Shut down cleanly on stop: in-flight screenshots finish and Chromium is closed before the add-on exits
+
 ## 2.6.0
 
 - Fix corrupted 24-bit BMP output for viewport widths not divisible by 4

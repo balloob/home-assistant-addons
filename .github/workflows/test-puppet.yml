@@ -3,23 +3,13 @@ name: Test Puppet
 on:
   pull_request:
     paths:
-      - "puppet/ha-puppet/http.js"
-      - "puppet/ha-puppet/screenshot.js"
-      - "puppet/ha-puppet/shutdown.js"
-      - "puppet/ha-puppet/test_shutdown.mjs"
-      - "puppet/ha-puppet/package.json"
-      - "puppet/ha-puppet/package-lock.json"
+      - "puppet/ha-puppet/**"
       - ".github/workflows/test-puppet.yml"
   push:
     branches:
       - main
     paths:
-      - "puppet/ha-puppet/http.js"
-      - "puppet/ha-puppet/screenshot.js"
-      - "puppet/ha-puppet/shutdown.js"
-      - "puppet/ha-puppet/test_shutdown.mjs"
-      - "puppet/ha-puppet/package.json"
-      - "puppet/ha-puppet/package-lock.json"
+      - "puppet/ha-puppet/**"
       - ".github/workflows/test-puppet.yml"
 
 jobs:
@@ -45,7 +35,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install test browser
+        run: npx puppeteer browsers install chrome
+
       - name: Run tests
         run: |
           cp options-dev.json.sample options-dev.json
-          node --test test_shutdown.mjs
+          node --test test_*.mjs
+          node validate-devices.js

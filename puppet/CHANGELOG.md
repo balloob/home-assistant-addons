@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.2
+
+### Bug fixes
+
+- Prevent a crash when a failed browser request has no failure details.
+
 ## 2.6.1
 
 - Requests without `theme` or `dark` no longer change the access token user's theme; previously every such screenshot switched that user's Home Assistant UI to light mode

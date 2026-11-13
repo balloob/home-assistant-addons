@@ -889,10 +889,10 @@
         if (lang) {
           params.append("lang", lang);
         }
-        if (colors) {
+        if (colors || device) {
           params.append("colors", colors);
         }
-        if (palette_colors) {
+        if (palette_colors || device) {
           params.append("palette_colors", palette_colors);
         }
         if (dithering && dithering !== "none") {
@@ -988,15 +988,12 @@
           const urlParams = url.searchParams;
           const pathname = url.pathname;
 
-          // Extract device parameter
-          if (urlParams.has("device")) {
-            document.getElementById("device").value = urlParams.get("device");
-          }
-
-          // Extract path from pathname if it's not just "/"
-          if (pathname && pathname !== "/") {
-            document.getElementById("path").value = pathname;
-          }
+          // Omitted parameters use request defaults, not the previous form values.
+          document.getElementById("screenshotForm").reset();
+          setViewportHeight(document.getElementById("height").value);
+          document.getElementById("device").value = urlParams.get("device") || "";
+          onDeviceChange();
+          document.getElementById("path").value = urlParams.get("path") || pathname;
 
           // Parse viewport (widthxheight, or widthxauto)
           const viewport = urlParams.get("viewport");
@@ -1146,11 +1143,11 @@
             params.append("viewport", currentViewport);
           }
 
-          if (colors && colors !== (currentDeviceConfig.colors || "")) {
+          if (colors !== (currentDeviceConfig.colors || "")) {
             params.append("colors", colors);
           }
 
-          if (palette_colors && palette_colors !== (currentDeviceConfig.palette_colors || "")) {
+          if (palette_colors !== (currentDeviceConfig.palette_colors || "")) {
             params.append("palette_colors", palette_colors);
           }
 
@@ -1214,19 +1211,7 @@
           params.append("bmp_mode", bmp_mode);
         }
 
-        // Construct full URL with port 10000
-        let baseUrl;
-        if (window.hass?.network?.internal) {
-          try {
-            const haUrl = new URL(window.hass.network.internal);
-            haUrl.port = "10000";
-            baseUrl = haUrl.origin;
-          } catch (e) {
-            baseUrl = window.location.origin;
-          }
-        } else {
-          baseUrl = window.location.origin;
-        }
+        const baseUrl = window.location.origin;
 
         const fullPath = path.startsWith("/") ? path : "/" + path;
         const url = `${baseUrl}${fullPath}?${params.toString()}`;
@@ -1516,15 +1501,12 @@
         )
         .forEach((input) => {
           input.addEventListener("change", () => {
+            if (input.id === "device") {
+              onDeviceChange();
+            }
             loadPreview();
           });
         });
-
-      // Add event listener for device selector specifically to handle device changes
-      // Note: loadPreview() is called by the generic select change listener below
-      document.getElementById("device").addEventListener("change", () => {
-        onDeviceChange();
-      });
 
       // Disable the height field while auto height is on (URL/preview refresh is
       // handled by the generic input listeners above).

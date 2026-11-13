@@ -2,9 +2,19 @@
 
 ## 2.6.2
 
+### E-ink settings
+
+Color palettes, dithering, and color inversion now have a dedicated collapsible settings group.
+
 ### Bug fixes
 
 - Prevent a crash when a failed browser request has no failure details.
+- Correct dithering when display output colors differ from the matching palette.
+- Close Home Assistant connections when UI data requests fail.
+- Use the Puppet address for screenshot URLs, including when Home Assistant uses HTTPS.
+- Reset old settings when importing a screenshot URL and apply the imported device defaults.
+- Preserve cleared device palettes in screenshot URLs and after reloading the UI.
+- Apply device settings before loading the preview.
 
 ## 2.6.1
 

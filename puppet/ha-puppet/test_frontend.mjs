@@ -16,7 +16,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
-async function openPage(t) {
+async function openPage(t, query = "") {
   const page = await browser.newPage();
   t.after(() => page.close());
   await page.setRequestInterception(true);
@@ -24,7 +24,7 @@ async function openPage(t) {
     contentType: "text/html",
     body: new URL(request.url()).pathname === "/" ? html : "",
   }));
-  await page.goto("http://puppet.test:10000/");
+  await page.goto(`http://puppet.test:10000/${query}`);
   await page.evaluate(() => {
     window.requests = [];
     window.fetch = async (url) => {
@@ -98,4 +98,39 @@ test("import applies device defaults before explicit overrides", async (t) => {
   assert.equal(params.get("palette_colors"), "");
   assert.equal(params.get("viewport"), "640xauto");
   assert.equal(params.get("dithering"), "none");
+});
+
+
+test("device-only UI URLs use the device defaults", async (t) => {
+  const page = await openPage(t, "?device=7.3in-spectra-e6");
+  const result = await page.evaluate(() => ({
+    url: buildUrl(),
+    colors: document.getElementById("colors").value,
+    palette: document.getElementById("palette_colors").value,
+    dithering: document.getElementById("dithering").value,
+  }));
+  const device = devices.devices["7.3in-spectra-e6"];
+  assert.equal(result.colors, device.colors);
+  assert.equal(result.palette, device.palette_colors);
+  assert.equal(result.dithering, device.dithering);
+  const params = new URL(result.url).searchParams;
+  assert.equal(params.has("colors"), false);
+  assert.equal(params.has("palette_colors"), false);
+  assert.equal(params.has("viewport"), false);
+});
+
+test("disabled device dithering survives permalink import and reload", async (t) => {
+  const page = await openPage(t);
+  await page.select("#device", "7.3in-spectra-e6");
+  await page.select("#dithering", "none");
+  const permalink = page.url();
+  assert.equal(new URL(permalink).searchParams.get("dithering"), "none");
+  const result = await page.evaluate((url) => {
+    document.getElementById("importUrlInput").value = url;
+    importUrl();
+    return buildUrl();
+  }, permalink);
+  assert.equal(new URL(result).searchParams.get("dithering"), "none");
+  await page.reload();
+  assert.equal(await page.$eval("#dithering", (element) => element.value), "none");
 });

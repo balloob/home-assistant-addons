@@ -13,9 +13,10 @@ const __dirname = dirname(__filename);
  * @returns {Promise<Object>} The Home Assistant data
  */
 async function fetchHomeAssistantData() {
+  let connection;
   try {
     const auth = createLongLivedTokenAuth(hassUrl, hassToken);
-    const connection = await createConnection({ auth });
+    connection = await createConnection({ auth });
 
     // Fetch themes and network URLs via WebSocket, and config (for the
     // language) via the REST API, all in parallel
@@ -34,8 +35,6 @@ async function fetchHomeAssistantData() {
       }),
     ]);
 
-    connection.close();
-
     const config = configResponse.ok ? await configResponse.json() : null;
 
     return {
@@ -50,6 +49,8 @@ async function fetchHomeAssistantData() {
       network: null,
       config: null,
     };
+  } finally {
+    connection?.close();
   }
 }
 

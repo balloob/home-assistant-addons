@@ -67,19 +67,13 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
     return closestIndex;
   }
 
-  // Function to find the closest color (returns the output color)
-  function findClosestColor(r, g, b) {
-    const index = findClosestColorIndex(r, g, b);
-    return rgbPalette[index];
-  }
-
   if (algorithm === "none") {
     // Simple nearest color mapping without dithering
     const result = new Uint8Array(data);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = (y * width + x) * channels;
-        const [newR, newG, newB] = findClosestColor(result[idx], result[idx + 1], result[idx + 2]);
+        const [newR, newG, newB] = rgbPalette[findClosestColorIndex(result[idx], result[idx + 1], result[idx + 2])];
         result[idx] = newR;
         result[idx + 1] = newG;
         result[idx + 2] = newB;
@@ -89,10 +83,10 @@ function applyDithering(data, width, height, palette, channels = 4, algorithm = 
   }
 
   // Apply error diffusion dithering
-  return applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColor);
+  return applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColorIndex, rgbPalette, rgbQuantizationPalette);
 }
 
-function applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColor) {
+function applyErrorDiffusionDithering(data, width, height, channels, algorithm, findClosestColorIndex, rgbPalette, rgbQuantizationPalette) {
   // Create a copy of the data in float to avoid quantization/truncation noise on each diffusion step
   const work = new Float32Array(data.length);
   for (let i = 0; i < data.length; i++) work[i] = data[i];
@@ -183,7 +177,9 @@ function applyErrorDiffusionDithering(data, width, height, channels, algorithm, 
 
       const oldR = work[i], oldG = work[i + 1], oldB = work[i + 2];
 
-      const [newR, newG, newB] = findClosestColor(oldR, oldG, oldB);
+      const colorIndex = findClosestColorIndex(oldR, oldG, oldB);
+      const [newR, newG, newB] = rgbPalette[colorIndex];
+      const [matchedR, matchedG, matchedB] = rgbQuantizationPalette[colorIndex];
 
       // Write quantized result
       result[i]     = newR;
@@ -191,9 +187,10 @@ function applyErrorDiffusionDithering(data, width, height, channels, algorithm, 
       result[i + 2] = newB;
       if (channels === 4) result[i + 3] = Math.round(clamp255(work[i + 3]));
 
-      let errorR = (oldR - newR) * errorGain;
-      let errorG = (oldG - newG) * errorGain;
-      let errorB = (oldB - newB) * errorGain;
+      // Diffuse matching error, not the difference from the device output code.
+      let errorR = (oldR - matchedR) * errorGain;
+      let errorG = (oldG - matchedG) * errorGain;
+      let errorB = (oldB - matchedB) * errorGain;
 
       // Only distribute error if there's significant quantization error
       // This prevents artifacts in solid color areas (like white backgrounds and borders)
@@ -208,8 +205,8 @@ function applyErrorDiffusionDithering(data, width, height, channels, algorithm, 
       // This prevents artifacts in solid areas and borders
       const isNearWhite = oldR > 245 && oldG > 245 && oldB > 245;
       const isNearBlack = oldR < 10 && oldG < 10 && oldB < 10;
-      const quantizedIsWhite = newR > 245 && newG > 245 && newB > 245;
-      const quantizedIsBlack = newR < 10 && newG < 10 && newB < 10;
+      const quantizedIsWhite = matchedR > 245 && matchedG > 245 && matchedB > 245;
+      const quantizedIsBlack = matchedR < 10 && matchedG < 10 && matchedB < 10;
 
       if ((isNearWhite && quantizedIsWhite) || (isNearBlack && quantizedIsBlack)) {
         continue;

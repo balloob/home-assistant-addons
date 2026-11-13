@@ -786,6 +786,7 @@
         // Extract device from query parameter
         if (urlParams.has("device")) {
           document.getElementById("device").value = urlParams.get("device");
+          onDeviceChange();
         }
 
         // Extract path from query parameter
@@ -895,7 +896,7 @@
         if (palette_colors || device) {
           params.append("palette_colors", palette_colors);
         }
-        if (dithering && dithering !== "none") {
+        if (dithering && (dithering !== "none" || device)) {
           params.append("dithering", dithering);
         }
         if (rotate) {

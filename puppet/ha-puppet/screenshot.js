@@ -375,7 +375,7 @@ export class Browser {
       .on("pageerror", ({ message }) => console.log("PAGE ERROR", message))
       .on("requestfailed", (request) =>
         console.log(
-          `REQUEST-FAILED ${request.failure().errorText} ${request.url()}`,
+          `REQUEST-FAILED ${request.failure()?.errorText ?? "unknown"} ${request.url()}`,
         ),
       );
     if (debug)

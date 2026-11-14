@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.3
+
+### Bug fixes
+
+- Restore the dithering behavior from 2.6.1 to fix thickened text and graph edges on e-ink displays with custom matching palettes.
+
 ## 2.6.2
 
 ### E-ink settings
